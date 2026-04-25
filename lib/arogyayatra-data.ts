@@ -1,9 +1,19 @@
 export type Role = "home" | "admin" | "patient" | "nurse" | "pharmacist" | "developer";
 export type Risk = "High priority" | "Watch closely" | "Routine";
+export type AuthStatus = "active" | "invited";
+
+export type AccountProfile = {
+  email: string;
+  username: string;
+  phone: string;
+  authStatus: AuthStatus;
+  lastLoginAt: string;
+};
 
 export type Patient = {
   id: string;
   name: string;
+  account: AccountProfile;
   diagnosis: string;
   risk: Risk;
   dischargeHoursAgo: number;
@@ -24,6 +34,7 @@ export type Patient = {
 export type Nurse = {
   id: string;
   name: string;
+  account: AccountProfile;
   specialty: string;
   shift: string;
   responseMinutes: number;
@@ -32,26 +43,128 @@ export type Nurse = {
 export type Pharmacist = {
   id: string;
   name: string;
+  account: AccountProfile;
   focus: string;
   queueSize: number;
   fillsToday: number;
 };
 
+export type AdminUser = {
+  id: string;
+  name: string;
+  account: AccountProfile;
+  title: string;
+  scope: string;
+};
+
+export type DeveloperUser = {
+  id: string;
+  name: string;
+  account: AccountProfile;
+  title: string;
+  focus: string;
+};
+
+export type AuthUserSeed = {
+  id: string;
+  role: Exclude<Role, "home">;
+  name: string;
+  email: string;
+  username: string;
+  phone: string;
+  authStatus: AuthStatus;
+  lastLoginAt: string;
+  linkedEntityId: string;
+  scopeSummary: string;
+};
+
 export const nurses: Nurse[] = [
-  { id: "NU-201", name: "Sarah Johnson", specialty: "Cardiac recovery", shift: "07:00-15:00", responseMinutes: 11 },
-  { id: "NU-202", name: "Michael Brown", specialty: "Respiratory follow-up", shift: "07:00-15:00", responseMinutes: 13 },
-  { id: "NU-203", name: "Priya Menon", specialty: "Post-surgical and chronic care", shift: "08:00-16:00", responseMinutes: 10 }
+  {
+    id: "NU-201",
+    name: "Sarah Johnson",
+    account: {
+      email: "sarah.johnson@arogyayatra.health",
+      username: "sarah.johnson",
+      phone: "+1 (555) 201-1001",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T21:10:00-04:00"
+    },
+    specialty: "Cardiac recovery",
+    shift: "07:00-15:00",
+    responseMinutes: 11
+  },
+  {
+    id: "NU-202",
+    name: "Michael Brown",
+    account: {
+      email: "michael.brown@arogyayatra.health",
+      username: "michael.brown",
+      phone: "+1 (555) 202-1002",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T20:42:00-04:00"
+    },
+    specialty: "Respiratory follow-up",
+    shift: "07:00-15:00",
+    responseMinutes: 13
+  },
+  {
+    id: "NU-203",
+    name: "Priya Menon",
+    account: {
+      email: "priya.menon@arogyayatra.health",
+      username: "priya.menon",
+      phone: "+1 (555) 203-1003",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T19:58:00-04:00"
+    },
+    specialty: "Post-surgical and chronic care",
+    shift: "08:00-16:00",
+    responseMinutes: 10
+  }
 ];
 
 export const pharmacists: Pharmacist[] = [
-  { id: "PH-301", name: "Olivia Martin", focus: "Medication reconciliation", queueSize: 2, fillsToday: 7 },
-  { id: "PH-302", name: "Ethan Cole", focus: "Insurance authorization and refill access", queueSize: 2, fillsToday: 5 }
+  {
+    id: "PH-301",
+    name: "Olivia Martin",
+    account: {
+      email: "olivia.martin@arogyayatra.health",
+      username: "olivia.martin",
+      phone: "+1 (555) 301-2001",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T18:40:00-04:00"
+    },
+    focus: "Medication reconciliation",
+    queueSize: 2,
+    fillsToday: 7
+  },
+  {
+    id: "PH-302",
+    name: "Ethan Cole",
+    account: {
+      email: "ethan.cole@arogyayatra.health",
+      username: "ethan.cole",
+      phone: "+1 (555) 302-2002",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T18:15:00-04:00"
+    },
+    focus: "Insurance authorization and refill access",
+    queueSize: 2,
+    fillsToday: 5
+  }
 ];
 
 export const patients: Patient[] = [
   {
     id: "PT-1001",
     name: "Maya Rivera",
+    account: {
+      email: "maya.rivera@example.com",
+      username: "maya.rivera",
+      phone: "+1 (555) 401-3001",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T20:05:00-04:00"
+    },
     diagnosis: "CHF with fluid retention",
     risk: "Watch closely",
     dischargeHoursAgo: 18,
@@ -80,6 +193,13 @@ export const patients: Patient[] = [
   {
     id: "PT-1002",
     name: "James Thornton",
+    account: {
+      email: "james.thornton@example.com",
+      username: "james.thornton",
+      phone: "+1 (555) 402-3002",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T17:48:00-04:00"
+    },
     diagnosis: "Post-acute chest pain follow-up",
     risk: "High priority",
     dischargeHoursAgo: 12,
@@ -107,6 +227,13 @@ export const patients: Patient[] = [
   {
     id: "PT-1003",
     name: "Margaret Ellis",
+    account: {
+      email: "margaret.ellis@example.com",
+      username: "margaret.ellis",
+      phone: "+1 (555) 403-3003",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T16:35:00-04:00"
+    },
     diagnosis: "Post-surgical wound review",
     risk: "Routine",
     dischargeHoursAgo: 28,
@@ -128,6 +255,101 @@ export const patients: Patient[] = [
     ],
     history: ["2024: Knee procedure recovery; short antibiotic course completed."]
   }
+];
+
+export const admins: AdminUser[] = [
+  {
+    id: "AD-101",
+    name: "Anita Patel",
+    account: {
+      email: "anita.patel@arogyayatra.health",
+      username: "anita.patel",
+      phone: "+1 (555) 101-9001",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T21:20:00-04:00"
+    },
+    title: "Care Operations Lead",
+    scope: "Priority coordination, staffing, and workflow oversight"
+  }
+];
+
+export const developers: DeveloperUser[] = [
+  {
+    id: "DV-101",
+    name: "Neeraj Gupta",
+    account: {
+      email: "neeraj.gupta@arogyayatra.health",
+      username: "neeraj.gupta",
+      phone: "+1 (555) 111-9501",
+      authStatus: "active",
+      lastLoginAt: "2026-04-24T22:05:00-04:00"
+    },
+    title: "Platform Developer",
+    focus: "Agent runtime, care coordination UX, and safe automation"
+  }
+];
+
+export const authUsers: AuthUserSeed[] = [
+  ...admins.map((admin) => ({
+    id: `AUTH-${admin.id}`,
+    role: "admin" as const,
+    name: admin.name,
+    email: admin.account.email,
+    username: admin.account.username,
+    phone: admin.account.phone,
+    authStatus: admin.account.authStatus,
+    lastLoginAt: admin.account.lastLoginAt,
+    linkedEntityId: admin.id,
+    scopeSummary: admin.scope
+  })),
+  ...developers.map((developer) => ({
+    id: `AUTH-${developer.id}`,
+    role: "developer" as const,
+    name: developer.name,
+    email: developer.account.email,
+    username: developer.account.username,
+    phone: developer.account.phone,
+    authStatus: developer.account.authStatus,
+    lastLoginAt: developer.account.lastLoginAt,
+    linkedEntityId: developer.id,
+    scopeSummary: developer.focus
+  })),
+  ...patients.map((patient) => ({
+    id: `AUTH-${patient.id}`,
+    role: "patient" as const,
+    name: patient.name,
+    email: patient.account.email,
+    username: patient.account.username,
+    phone: patient.account.phone,
+    authStatus: patient.account.authStatus,
+    lastLoginAt: patient.account.lastLoginAt,
+    linkedEntityId: patient.id,
+    scopeSummary: `Own patient record for ${patient.name}`
+  })),
+  ...nurses.map((nurse) => ({
+    id: `AUTH-${nurse.id}`,
+    role: "nurse" as const,
+    name: nurse.name,
+    email: nurse.account.email,
+    username: nurse.account.username,
+    phone: nurse.account.phone,
+    authStatus: nurse.account.authStatus,
+    lastLoginAt: nurse.account.lastLoginAt,
+    linkedEntityId: nurse.id,
+    scopeSummary: `Assigned patient panel for ${nurse.name}`
+  })),
+  ...pharmacists.map((pharmacist) => ({
+    id: `AUTH-${pharmacist.id}`,
+    role: "pharmacist" as const,
+    name: pharmacist.name,
+    email: pharmacist.account.email,
+    username: pharmacist.account.username,
+    phone: pharmacist.account.phone,
+    authStatus: pharmacist.account.authStatus,
+    lastLoginAt: pharmacist.account.lastLoginAt,
+    linkedEntityId: pharmacist.id,
+    scopeSummary: `Medication queue and linked patients for ${pharmacist.name}`
+  }))
 ];
 
 export const journeyStages = ["Intake", "Assessment", "Treatment", "Monitoring", "Recovery"] as const;
