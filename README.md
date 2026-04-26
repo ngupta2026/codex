@@ -2,6 +2,16 @@
 
 ArogyaYatra is an AI-enabled healthcare coordinator for post-discharge virtual care. This Next.js app currently delivers the home, admin, patient, nurse, pharmacist, and developer boards plus an agent-ready backend path for page-specific chat.
 
+## Live deployment
+
+The current public deployment is live on Vercel:
+
+- Public URL: `https://carejourney.vercel.app`
+- Project alias: `https://arogyayatra-next-app.vercel.app`
+- Deployment URL: `https://arogyayatra-next-jkjxg2fiw-ngupta49-9905s-projects.vercel.app`
+
+The Vercel CLI linked this repo to the Vercel project `arogyayatra-next-app`. The local `.vercel` directory stays ignored through `.gitignore`.
+
 ## Current agentic implementation
 
 The first backend integration pass is now in place.
