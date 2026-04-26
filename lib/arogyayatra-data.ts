@@ -1,4 +1,4 @@
-export type Role = "home" | "admin" | "patient" | "nurse" | "pharmacist" | "developer";
+export type Role = "home" | "admin" | "patient" | "nurse" | "pharmacist" | "developer" | "feedback";
 export type Risk = "High priority" | "Watch closely" | "Routine";
 export type AuthStatus = "active" | "invited";
 
@@ -67,7 +67,7 @@ export type DeveloperUser = {
 
 export type AuthUserSeed = {
   id: string;
-  role: Exclude<Role, "home">;
+  role: Exclude<Role, "home" | "feedback">;
   name: string;
   email: string;
   username: string;

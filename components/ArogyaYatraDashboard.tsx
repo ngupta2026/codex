@@ -7,8 +7,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   agentCapabilities,
   answerCareQuestion,
+  authUsers,
+  developers,
   getPatientById,
-  journeyStages,
   nurses,
   patients,
   patientsForNurse,
@@ -27,24 +28,71 @@ type EntitySelection =
   | { type: "pharmacist"; id: string }
   | null;
 
-const navItems: Array<{ id: Role; label: string; href: string }> = [
-  { id: "home", label: "Home", href: "/" },
-  { id: "patient", label: "Patient", href: "/patient/PT-1001" },
-  { id: "nurse", label: "Nurse", href: "/nurse" },
-  { id: "pharmacist", label: "Pharmacist", href: "/pharmacist" },
-  { id: "developer", label: "Developer", href: "/developer" }
+const navItems: Array<{ id: Role; label: string; href: string; icon: IconName; hint: string }> = [
+  { id: "home", label: "Home", href: "/", icon: "home", hint: "Journey, role routing, and support overview" },
+  { id: "admin", label: "Admin", href: "/admin", icon: "admin", hint: "Operations, priorities, and staffing" },
+  { id: "patient", label: "Patient", href: "/patient/PT-1001", icon: "patient", hint: "Medicines, vitals, visits, and guidance" },
+  { id: "nurse", label: "Nurse", href: "/nurse", icon: "nurse", hint: "Triage queue and follow-up coordination" },
+  { id: "pharmacist", label: "Pharmacist", href: "/pharmacist", icon: "pharmacist", hint: "Refills, insurance, and medication continuity" },
+  { id: "developer", label: "Developer", href: "/developer", icon: "developer", hint: "Agentic observability, traces, and system control" },
+  { id: "feedback", label: "AI Enabled Feedback", href: "/feedback", icon: "spark", hint: "Capture workflow feedback and generate AI feature prompts" }
 ];
 
-const homeActions: Array<{ label: string; href: string }> = [
-  { label: "Admin dashboard", href: "/admin" },
-  { label: "Patient dashboard", href: "/patient/PT-1001" },
-  { label: "Nurse dashboard", href: "/nurse" },
-  { label: "Pharmacist dashboard", href: "/pharmacist" }
+const homeActions: Array<{ label: string; href: string; icon: IconName; detail: string }> = [
+  { label: "Admin dashboard", href: "/admin", icon: "admin", detail: "Oversee care operations, staffing pressure, and high-priority coordination." },
+  { label: "Patient dashboard", href: "/patient/PT-1001", icon: "patient", detail: "See recovery steps, medicines, virtual visit prep, and safety guidance." },
+  { label: "Nurse dashboard", href: "/nurse", icon: "nurse", detail: "Review triage queues, daily follow-up load, and next outreach actions." },
+  { label: "Pharmacist dashboard", href: "/pharmacist", icon: "pharmacist", detail: "Track refill blockers, insurance issues, and medication continuity." },
+  { label: "AI Enabled Feedback", href: "/feedback", icon: "spark", detail: "Turn page feedback into structured AI improvement prompts for the product team." }
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const positiveQuote = "Small steps today build safer recoveries tomorrow.";
-type IconName = "heart" | "calendar" | "camera" | "pill" | "shield" | "stethoscope" | "pulse" | "message";
+const HOME_POSITIVE_MESSAGES = [
+  positiveQuote,
+  "Wellness is a journey we take together.",
+  "Healing grows with support, consistency, and care.",
+  "Every coordinated step helps the recovery journey move forward.",
+  "Guided care and connected teams create calmer recoveries.",
+  "A better tomorrow starts with clear support today.",
+  "Compassion, clarity, and connection strengthen recovery.",
+  "Steady support creates more confident care journeys."
+] as const;
+
+const HOME_RIBBON_BLOCKED_PATTERNS = [
+  /\bpatient\b/i,
+  /\bnurse\b/i,
+  /\bpharmac/i,
+  /\badmin\b/i,
+  /\bdeveloper\b/i,
+  /\brisk\b/i,
+  /\bcritical\b/i,
+  /\bbarrier\b/i,
+  /\brefill\b/i,
+  /\bappointment\b/i,
+  /\bqueue\b/i,
+  /\bstatus\b/i,
+  /\bdischarge\b/i,
+  /\bwatch closely\b/i,
+  /\bhigh priority\b/i
+] as const;
+type IconName =
+  | "heart"
+  | "calendar"
+  | "camera"
+  | "pill"
+  | "shield"
+  | "stethoscope"
+  | "pulse"
+  | "message"
+  | "home"
+  | "login"
+  | "admin"
+  | "patient"
+  | "nurse"
+  | "pharmacist"
+  | "developer"
+  | "spark";
 
 function shuffleMessages(values: string[]): string[] {
   const copy = [...values];
@@ -53,6 +101,11 @@ function shuffleMessages(values: string[]): string[] {
     [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
   }
   return copy;
+}
+
+function approvedHomeRibbonMessages(values: readonly string[]): string[] {
+  const approved = values.filter((value) => HOME_RIBBON_BLOCKED_PATTERNS.every((pattern) => !pattern.test(value.trim())));
+  return approved.length > 0 ? [...approved] : [positiveQuote];
 }
 
 function useCurrentTime(): Date | null {
@@ -129,6 +182,67 @@ function MedicalIcon({ name }: { name: IconName }) {
       </svg>
     );
   }
+  if (name === "home") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M3 11.5 12 4l9 7.5" />
+        <path {...common} d="M6 10.5V20h12v-9.5" />
+      </svg>
+    );
+  }
+  if (name === "login") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M13 5h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
+        <path {...common} d="M4 12h11" />
+        <path {...common} d="m11 7 4 5-4 5" />
+      </svg>
+    );
+  }
+  if (name === "admin") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle {...common} cx="12" cy="12" r="3.5" />
+        <path {...common} d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.6Z" />
+      </svg>
+    );
+  }
+  if (name === "patient") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle {...common} cx="12" cy="8" r="3.5" />
+        <path {...common} d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+      </svg>
+    );
+  }
+  if (name === "nurse") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="M12 5v5" />
+        <path {...common} d="M9.5 7.5h5" />
+        <path {...common} d="M5 19c0-3.9 3.1-7 7-7s7 3.1 7 7" />
+        <path {...common} d="M9 5.5h6" />
+      </svg>
+    );
+  }
+  if (name === "pharmacist") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect {...common} x="6" y="4.5" width="12" height="15" rx="2.5" />
+        <path {...common} d="M9 8.5h6M9 12h6M9 15.5h4" />
+        <path {...common} d="m15.5 4.5-1 3" />
+      </svg>
+    );
+  }
+  if (name === "developer") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="m8 8-4 4 4 4" />
+        <path {...common} d="m16 8 4 4-4 4" />
+        <path {...common} d="m13.5 5.5-3 13" />
+      </svg>
+    );
+  }
   if (name === "pill") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -156,6 +270,14 @@ function MedicalIcon({ name }: { name: IconName }) {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path {...common} d="M3 12h4l2-4 4 9 2-5h6" />
+      </svg>
+    );
+  }
+  if (name === "spark") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path {...common} d="m12 3 1.8 4.7L18.5 9l-4.7 1.8L12 15.5l-1.8-4.7L5.5 9l4.7-1.3L12 3Z" />
+        <path {...common} d="m18.5 14.5.9 2.3 2.3.9-2.3.9-.9 2.4-.9-2.4-2.4-.9 2.4-.9.9-2.3Z" />
       </svg>
     );
   }
@@ -290,6 +412,141 @@ function CalendarPanel({ now }: { now: Date | null }) {
   );
 }
 
+function WorkspaceCard({ icon, title, detail, href }: { icon: IconName; title: string; detail: string; href: string }) {
+  return (
+    <Link className="ay-workspace-card" href={href}>
+      <div className="ay-workspace-card-head">
+        <span className="ay-icon-badge large">
+          <MedicalIcon name={icon} />
+        </span>
+        <strong>{title}</strong>
+      </div>
+      <p>{detail}</p>
+      <span className="ay-workspace-link">Open workspace</span>
+    </Link>
+  );
+}
+
+function SupportPillar({ icon, title, detail }: { icon: IconName; title: string; detail: string }) {
+  return (
+    <article className="ay-support-pillar">
+      <div className="ay-support-pillar-head">
+        <span className="ay-icon-badge large">
+          <MedicalIcon name={icon} />
+        </span>
+        <strong>{title}</strong>
+      </div>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
+function formatMockLoginTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Recently active";
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function getSidebarMockUser(role: Role, patient: Patient) {
+  if (role === "patient") {
+    return authUsers.find((user) => user.role === "patient" && user.linkedEntityId === patient.id) ?? null;
+  }
+  if (role === "feedback") {
+    return authUsers.find((user) => user.role === "developer") ?? null;
+  }
+  if (role === "home") return null;
+  return authUsers.find((user) => user.role === role) ?? null;
+}
+
+function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
+  const currentUser = getSidebarMockUser(role, patient);
+  const [email, setEmail] = useState(currentUser?.email ?? "");
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    setEmail(currentUser?.email ?? "");
+    setPassword("");
+  }, [currentUser?.email]);
+
+  if (role !== "home" && currentUser) {
+    return (
+      <section className="ay-sidebar-auth-card ay-sidebar-account-card">
+        <div className="ay-sidebar-auth-head">
+          <span className="ay-icon-badge">
+            <MedicalIcon name="shield" />
+          </span>
+          <div>
+            <strong>Signed in</strong>
+            <span>Mock account preview</span>
+          </div>
+        </div>
+        <div className="ay-sidebar-account-summary">
+          <strong>{currentUser.name}</strong>
+          <span>{currentUser.email}</span>
+          <div className="ay-sidebar-account-meta">
+            <em>{currentUser.role}</em>
+            <em>{currentUser.authStatus}</em>
+          </div>
+        </div>
+        <div className="ay-sidebar-trust-box compact">
+          <span className="ay-icon-badge">
+            <MedicalIcon name="login" />
+          </span>
+          <div>
+            <strong>Role-scoped access</strong>
+            <span>{currentUser.scopeSummary}</span>
+          </div>
+        </div>
+        <div className="ay-sidebar-session-row">
+          <span>Last login</span>
+          <strong>{formatMockLoginTime(currentUser.lastLoginAt)}</strong>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="ay-sidebar-auth-card">
+      <div className="ay-sidebar-auth-head">
+        <span className="ay-icon-badge">
+          <MedicalIcon name="login" />
+        </span>
+        <div>
+          <strong>Sign in to continue</strong>
+        </div>
+      </div>
+      <label className="ay-sidebar-field">
+        <span>Email address</span>
+        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
+      </label>
+      <label className="ay-sidebar-field">
+        <span>Password</span>
+        <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" />
+      </label>
+      <div className="ay-sidebar-auth-links">
+        <button type="button">Forgot password?</button>
+        <span>UI preview only</span>
+      </div>
+      <button className="ay-sidebar-primary-button" type="button">Sign in</button>
+      <div className="ay-sidebar-divider"><span>or continue with</span></div>
+      <div className="ay-sidebar-socials">
+        <button type="button"><span className="ay-social-mark google">G</span> Sign in with Google</button>
+        <button type="button"><span className="ay-social-mark microsoft">M</span> Sign in with Microsoft</button>
+        <button type="button"><span className="ay-social-mark sso"><MedicalIcon name="shield" /></span> Sign in with SSO</button>
+      </div>
+      <div className="ay-sidebar-auth-links footer">
+        <span>New to ArogyaYatra?</span>
+        <button type="button">Request access</button>
+      </div>
+    </section>
+  );
+}
+
 function CameraPrepCard({ patient, title }: { patient: Patient; title: string }) {
   const [open, setOpen] = useState(false);
 
@@ -298,15 +555,20 @@ function CameraPrepCard({ patient, title }: { patient: Patient; title: string })
       <Card title={title} action={<button className="ay-ghost-button" type="button" onClick={() => setOpen(true)}>Open pre-call</button>}>
         <div className="ay-camera-shell">
           <div className="ay-camera">
-            <div className="ay-camera-badges">
-              <span className="ay-inline-chip"><MedicalIcon name="camera" /> Video ready</span>
-              <span className="ay-inline-chip"><MedicalIcon name="message" /> Audio check</span>
+            <div className="ay-camera-media">
+              <Image src="/camera-interface-reference.png" alt="Virtual consultation preview" fill sizes="(max-width: 820px) 100vw, 50vw" priority={false} />
             </div>
-            <div className="ay-camera-avatar">
-              <MedicalIcon name="camera" />
+            <div className="ay-camera-overlay">
+              <div className="ay-camera-badges">
+                <span className="ay-inline-chip"><MedicalIcon name="camera" /> Video ready</span>
+                <span className="ay-inline-chip"><MedicalIcon name="message" /> Audio check</span>
+              </div>
+              <div className="ay-camera-avatar">
+                <MedicalIcon name="camera" />
+              </div>
+              <strong>{patient.name}</strong>
+              <span>Preview camera and microphone before connecting to the care team.</span>
             </div>
-            <strong>{patient.name}</strong>
-            <span>Preview camera and microphone before connecting to the care team.</span>
           </div>
           <div className="ay-grid-3 compact">
             <StatCard label="Connection" value="Strong" detail="Private visit link ready" />
@@ -329,11 +591,16 @@ function CameraPrepCard({ patient, title }: { patient: Patient; title: string })
                   <span className="ay-inline-chip"><MedicalIcon name="camera" /> {patient.appointment}</span>
                 </div>
                 <div className="ay-precall-video">
-                  <div className="ay-camera-avatar large">
-                    <MedicalIcon name="camera" />
+                  <div className="ay-precall-video-media">
+                    <Image src="/camera-interface-reference.png" alt="Virtual consultation preview" fill sizes="(max-width: 820px) 100vw, 60vw" priority={false} />
                   </div>
-                  <strong>{patient.name}</strong>
-                  <span>Preview your video before joining the virtual visit.</span>
+                  <div className="ay-precall-video-overlay">
+                    <div className="ay-camera-avatar large">
+                      <MedicalIcon name="camera" />
+                    </div>
+                    <strong>{patient.name}</strong>
+                    <span>Preview your video before joining the virtual visit.</span>
+                  </div>
                 </div>
                 <div className="ay-precall-controls">
                   <button type="button"><MedicalIcon name="camera" /> Camera</button>
@@ -381,7 +648,9 @@ function DeveloperView({
   sourceRoleFromQuery?: Role;
   patientIdFromQuery?: string;
 }) {
-  const [sourceRole, setSourceRole] = useState<Role>(sourceRoleFromQuery || (currentRole !== "developer" ? currentRole : "home"));
+  const defaultSourceRole =
+    sourceRoleFromQuery || (currentRole === "home" || currentRole === "developer" || currentRole === "feedback" ? "home" : currentRole);
+  const [sourceRole, setSourceRole] = useState<Role>(defaultSourceRole);
   const [patientId, setPatientId] = useState(patientIdFromQuery || currentPatient.id);
   const [userType, setUserType] = useState("customer");
   const [aiGoal, setAiGoal] = useState("care coordination");
@@ -390,23 +659,45 @@ function DeveloperView({
   const [constraints, setConstraints] = useState("Keep the feature calm, explainable, and safe for healthcare coordination.");
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [contextSummary, setContextSummary] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const selectedPatient = getPatientById(patientId);
 
   async function generatePrompt() {
+    const trimmedFeedback = feedback.trim();
+    const trimmedOutcome = desiredOutcome.trim();
+
+    if (!trimmedFeedback || !trimmedOutcome) {
+      setErrorMessage("Feedback and desired outcome are required before generating the prompt.");
+      return;
+    }
+
     setLoading(true);
+    setErrorMessage("");
     try {
       const response = await fetch("/api/developer-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceRole, patientId, userType, aiGoal, feedback, desiredOutcome, constraints })
+        body: JSON.stringify({
+          sourceRole,
+          patientId,
+          userType,
+          aiGoal,
+          feedback: trimmedFeedback,
+          desiredOutcome: trimmedOutcome,
+          constraints
+        })
       });
       const payload = (await response.json()) as { prompt?: string; contextSummary?: string; error?: string };
       if (!response.ok || !payload.prompt) {
-        throw new Error(payload.error || "Prompt generation failed");
+        setErrorMessage(payload.error || "Prompt generation failed");
+        return;
       }
       setGeneratedPrompt(payload.prompt);
       setContextSummary(payload.contextSummary || "");
+      setErrorMessage("");
+    } catch {
+      setErrorMessage("Prompt generation failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -416,8 +707,8 @@ function DeveloperView({
     <div className="ay-board">
       <div className="ay-topbar">
         <div>
-          <span className="ay-pill">Developer board</span>
-          <h2>AI feature prompt builder</h2>
+          <span className="ay-pill">AI Enabled Feedback</span>
+          <h2>Capture feedback and shape safer AI features</h2>
           <p>Capture feedback from any page, choose the end-user persona, and generate a ChatGPT-ready prompt for tailored AI features.</p>
         </div>
       </div>
@@ -427,7 +718,7 @@ function DeveloperView({
             <label className="ay-field">
               <span>Source page</span>
               <select value={sourceRole} onChange={(event) => setSourceRole(event.target.value as Role)}>
-                {navItems.filter((item) => item.id !== "developer").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                {navItems.filter((item) => item.id !== "developer" && item.id !== "feedback").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </label>
             <label className="ay-field">
@@ -450,11 +741,27 @@ function DeveloperView({
             </label>
             <label className="ay-field full">
               <span>Feedback from the current page</span>
-              <textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Describe the pain point, missing AI behavior, or workflow gap." rows={5} />
+              <textarea
+                value={feedback}
+                onChange={(event) => {
+                  setFeedback(event.target.value);
+                  if (errorMessage) setErrorMessage("");
+                }}
+                placeholder="Describe the pain point, missing AI behavior, or workflow gap."
+                rows={5}
+              />
             </label>
             <label className="ay-field full">
               <span>Desired outcome</span>
-              <textarea value={desiredOutcome} onChange={(event) => setDesiredOutcome(event.target.value)} placeholder="Describe what the app should do for this end user." rows={4} />
+              <textarea
+                value={desiredOutcome}
+                onChange={(event) => {
+                  setDesiredOutcome(event.target.value);
+                  if (errorMessage) setErrorMessage("");
+                }}
+                placeholder="Describe what the app should do for this end user."
+                rows={4}
+              />
             </label>
             <label className="ay-field full">
               <span>Constraints</span>
@@ -463,6 +770,7 @@ function DeveloperView({
             <div className="ay-form-actions">
               <button className="ay-primary-button" type="button" onClick={() => void generatePrompt()}>{loading ? "Generating..." : "Generate ChatGPT prompt"}</button>
             </div>
+            {errorMessage ? <p className="ay-form-feedback" role="alert">{errorMessage}</p> : null}
           </div>
         </Card>
         <Card title="Context snapshot">
@@ -493,6 +801,174 @@ function DeveloperView({
   );
 }
 
+function DeveloperConsoleView() {
+  const developer = developers[0];
+  const agentNodes = [
+    { name: "Planner Agent", status: "Healthy", time: "120 ms", tone: "success" },
+    { name: "Context Agent", status: "Healthy", time: "98 ms", tone: "success" },
+    { name: "Patient Agent", status: "Healthy", time: "110 ms", tone: "success" },
+    { name: "Pharmacy Agent", status: "Warning", time: "320 ms", tone: "warning" },
+    { name: "Monitoring Agent", status: "Healthy", time: "95 ms", tone: "success" },
+    { name: "Policy Engine", status: "Healthy", time: "80 ms", tone: "success" },
+    { name: "Reviewer Agent", status: "Approved", time: "210 ms", tone: "info" },
+    { name: "Action Executor", status: "Completed", time: "140 ms", tone: "success" }
+  ] as const;
+  const recentTraces = [
+    ["req_12345", "Sunita Devi (Nurse)", "Completed", "1.02s", "10:32:15 AM"],
+    ["req_12344", "Ramesh Kumar (Patient)", "Completed", "0.89s", "10:31:58 AM"],
+    ["req_12342", "Anita Verma (Nurse)", "Completed", "0.76s", "10:31:33 AM"],
+    ["req_12341", "Mohammed Ali (Patient)", "Warning", "2.34s", "10:31:21 AM"]
+  ];
+  const liveEvents = [
+    ["10:32:19 AM", "Action Executor", "Action Completed", "Info", "Medication review escalated and task created"],
+    ["10:32:18 AM", "Reviewer Agent", "Review Approved", "Info", "Reviewer approved the recommended action"],
+    ["10:32:17 AM", "Policy Engine", "Policy Check", "Info", "High risk detected. Escalation required."],
+    ["10:32:16 AM", "Pharmacy Agent", "Drug Interaction", "Warning", "High-risk interaction found: Furosemide + NSAIDs"]
+  ];
+
+  return (
+    <div className="ay-board ay-dev-board">
+      <div className="ay-dev-toolbar">
+        <div className="ay-dev-search">
+          <MedicalIcon name="message" />
+          <input value="Search agents, traces, tools..." readOnly aria-label="Developer search" />
+          <span>K</span>
+        </div>
+        <div className="ay-dev-toolbar-meta">
+          <span className="ay-dev-status"><i /> All Systems Operational</span>
+          <button type="button" className="ay-ghost-button">API Docs</button>
+          <button type="button" className="ay-secondary-button">{developer.name}</button>
+        </div>
+      </div>
+      <div className="ay-topbar">
+        <div>
+          <span className="ay-pill">Developer board</span>
+          <h2>Multi-Agent Overview</h2>
+          <p>Observe, test, and debug AI-powered care coordination with a mock developer console built for the ArogyaYatra agentic runtime.</p>
+        </div>
+        <div className="ay-dev-toolbar-meta">
+          <button type="button" className="ay-secondary-button">Last 1 hour</button>
+          <button type="button" className="ay-ghost-button">Auto refresh</button>
+        </div>
+      </div>
+      <div className="ay-kpis ay-dev-kpis">
+        <StatCard label="Total requests" value="12.4K" detail="12.5% up vs last hour" />
+        <StatCard label="Success rate" value="99.62%" detail="0.8% up vs last hour" />
+        <StatCard label="Avg. latency" value="142 ms" detail="8.6% down vs last hour" />
+        <StatCard label="Active agents" value="8 / 9" detail="1 new activation" />
+        <StatCard label="Guardrail blocks" value="32" detail="4 less than last hour" />
+        <StatCard label="Cost (est.)" value="$18.62" detail="9.2% down vs last hour" />
+      </div>
+      <div className="ay-dev-layout">
+        <div className="ay-dev-main">
+          <Card title="Agent execution graph" action={<span className="ay-badge success">Live</span>}>
+            <div className="ay-dev-graph">
+              <div className="ay-dev-graph-lane">
+                <div className="ay-dev-node static">
+                  <strong>User / System</strong>
+                  <span>Request ID req_12345</span>
+                </div>
+                <div className="ay-dev-node success">
+                  <strong>Planner Agent</strong>
+                  <span>Healthy - 120 ms</span>
+                </div>
+                <div className="ay-dev-node-stack">
+                  {agentNodes.slice(1, 5).map((node) => (
+                    <div key={node.name} className={`ay-dev-node ${node.tone.toLowerCase()}`}>
+                      <strong>{node.name}</strong>
+                      <span>{node.status} - {node.time}</span>
+                    </div>
+                  ))}
+                </div>
+                {agentNodes.slice(5).map((node) => (
+                  <div key={node.name} className={`ay-dev-node ${node.tone.toLowerCase()}`}>
+                    <strong>{node.name}</strong>
+                    <span>{node.status} - {node.time}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+          <div className="ay-dev-grid-2">
+            <Card title="Agent status" action={<span className="ay-badge success">Live</span>}>
+              <table className="ay-table">
+                <tbody>
+                  {agentNodes.map((node, index) => (
+                    <tr key={node.name}>
+                      <td>{node.name}</td>
+                      <td><span className={badgeClass(node.status)}>{node.status}</span></td>
+                      <td>{(1200 - index * 40) / 1000}K</td>
+                      <td>{node.time}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+            <Card title="Recent traces" action={<button type="button" className="ay-ghost-button">View all</button>}>
+              <table className="ay-table">
+                <tbody>
+                  {recentTraces.map(([id, source, status, duration, time]) => (
+                    <tr key={id}>
+                      <td>{id}</td>
+                      <td>{source}</td>
+                      <td><span className={badgeClass(status)}>{status}</span></td>
+                      <td>{duration}</td>
+                      <td>{time}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </div>
+          <Card title="Live events stream" action={<span className="ay-badge success">Live</span>}>
+            <table className="ay-table">
+              <tbody>
+                {liveEvents.map(([time, agent, eventType, level, message]) => (
+                  <tr key={`${time}-${agent}`}>
+                    <td>{time}</td>
+                    <td>{agent}</td>
+                    <td>{eventType}</td>
+                    <td><span className={badgeClass(level)}>{level}</span></td>
+                    <td>{message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+        <div className="ay-dev-side">
+          <Card title="Trace inspector" action={<button type="button" className="ay-ghost-button">View full trace</button>}>
+            <div className="ay-detail-list">
+              <div><strong>Request ID</strong><span>req_12345</span></div>
+              <div><strong>Initiated by</strong><span>Nurse (Sunita Devi)</span></div>
+              <div><strong>User intent</strong><span>Check medication interaction and escalate if high risk</span></div>
+            </div>
+            <ul className="ay-list">
+              {agentNodes.map((node) => (
+                <li key={node.name}><strong>{node.name}</strong><span>{node.status} - {node.time}</span></li>
+              ))}
+            </ul>
+          </Card>
+          <Card title="Prompt & tool inspector">
+            <div className="ay-detail-list">
+              <div><strong>Prompt</strong><span>Healthcare coordinator with policy-aware escalation.</span></div>
+              <div><strong>Tools</strong><span>3 active tools in this trace</span></div>
+              <div><strong>Model</strong><span>gpt-4o mock runtime</span></div>
+            </div>
+          </Card>
+          <Card title="Quick actions">
+            <div className="ay-actions">
+              <button className="ay-secondary-button" type="button">Test run</button>
+              <button className="ay-secondary-button" type="button">New prompt</button>
+              <button className="ay-primary-button" type="button">Add agent</button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Assistant({ role, patient }: { role: Role; patient: Patient }) {
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("Ask for page-specific guidance, medication history, workload, or refill blockers.");
@@ -508,6 +984,8 @@ function Assistant({ role, patient }: { role: Role; patient: Patient }) {
             ? "Nurse assistant"
             : role === "pharmacist"
               ? "Pharmacy assistant"
+              : role === "feedback"
+                ? "AI feedback assistant"
               : "Developer assistant";
 
   async function respond(text: string) {
@@ -521,8 +999,20 @@ function Assistant({ role, patient }: { role: Role; patient: Patient }) {
         body: JSON.stringify({ role, patientId: patient.id, question: cleaned })
       });
       if (!response.ok) throw new Error("Chat route failed");
-      const payload = (await response.json()) as { answer: string; agentsUsed?: string[] };
-      setAnswer(`${payload.answer}${payload.agentsUsed?.length ? ` Agents used: ${payload.agentsUsed.join(", ")}.` : ""}`);
+      const payload = (await response.json()) as {
+        answer: string;
+        agentsUsed?: string[];
+        safeNextActions?: string[];
+        escalationRequired?: boolean;
+      };
+      const details = [
+        payload.agentsUsed?.length ? `Agents used: ${payload.agentsUsed.join(", ")}.` : "",
+        payload.safeNextActions?.length ? `Next: ${payload.safeNextActions.join(" ")}` : "",
+        payload.escalationRequired ? "Escalation required." : ""
+      ]
+        .filter(Boolean)
+        .join(" ");
+      setAnswer(`${payload.answer}${details ? ` ${details}` : ""}`);
     } catch {
       const fallback = answerCareQuestion(role, patient.id, cleaned);
       setAnswer(`${fallback.answer} Agents used: ${fallback.agentsUsed.join(", ")}.`);
@@ -666,52 +1156,461 @@ function AdminView({ onSelect }: { onSelect: (selection: EntitySelection) => voi
   );
 }
 
-function PatientView({ patient }: { patient: Patient }) {
+type JourneyStep = {
+  name: string;
+  status: "Completed" | "In Progress" | "Attention" | "Upcoming";
+  detail: string;
+  meta: string;
+  icon: IconName;
+};
+
+function journeyStepTone(status: JourneyStep["status"]): "success" | "info" | "warning" {
+  if (status === "Completed") return "success";
+  if (status === "Attention") return "warning";
+  return "info";
+}
+
+function JourneyLegend() {
+  const items: Array<{ label: string; tone: "success" | "info" | "warning" | "muted" }> = [
+    { label: "Completed", tone: "success" },
+    { label: "In Progress", tone: "info" },
+    { label: "Attention", tone: "warning" },
+    { label: "Upcoming", tone: "muted" }
+  ];
+
   return (
-    <div className="ay-board">
+    <div className="ay-journey-legend">
+      {items.map((item) => (
+        <span key={item.label} className={`ay-journey-legend-item ${item.tone}`}>
+          <i />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function JourneyStrip({ stages }: { stages: JourneyStep[] }) {
+  return (
+    <div className="ay-journey-strip">
+      {stages.map((stage, index) => (
+        <article key={stage.name} className={`ay-journey-stage ${journeyStepTone(stage.status).toLowerCase()} ${stage.status === "In Progress" ? "current" : ""}`}>
+          <div className="ay-journey-stage-top">
+            <span className={`ay-journey-stage-dot ${journeyStepTone(stage.status).toLowerCase()}`} />
+            <span className="ay-icon-badge large">
+              <MedicalIcon name={stage.icon} />
+            </span>
+          </div>
+          <strong>{stage.name}</strong>
+          <em className={`ay-badge ${badgeClass(stage.status)}`}>{stage.status}</em>
+          <span>{stage.detail}</span>
+          <small>{stage.meta}</small>
+          {index < stages.length - 1 ? <div className="ay-journey-stage-link" aria-hidden="true"><span>&rarr;</span></div> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function AlertStack({ title, items }: { title: string; items: Array<{ label: string; detail: string; tone: "danger" | "warning" | "info" }> }) {
+  return (
+    <Card title={title}>
+      <div className="ay-alert-stack">
+        {items.map((item) => (
+          <button key={`${item.label}-${item.detail}`} type="button" className={`ay-alert-item ${item.tone}`}>
+            <div>
+              <strong>{item.label}</strong>
+              <span>{item.detail}</span>
+            </div>
+            <em>&rarr;</em>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function ActionStack({ title, items }: { title: string; items: string[] }) {
+  return (
+    <Card title={title}>
+      <div className="ay-action-stack">
+        {items.map((item) => (
+          <button key={item} type="button" className="ay-action-row">
+            <span>{item}</span>
+            <em>&rarr;</em>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function TimelineCard({ title, items }: { title: string; items: Array<{ label: string; detail: string; meta: string; icon: IconName }> }) {
+  return (
+    <Card title={title} action={<button type="button" className="ay-ghost-button">View all activity</button>}>
+      <div className="ay-timeline">
+        {items.map((item) => (
+          <div key={`${item.label}-${item.meta}`} className="ay-timeline-item">
+            <span className="ay-timeline-icon">
+              <MedicalIcon name={item.icon} />
+            </span>
+            <div>
+              <strong>{item.label}</strong>
+              <span>{item.detail}</span>
+              <small>{item.meta}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function TeamCard({ patient }: { patient: Patient }) {
+  const physicianName = patient.id === "PT-1001" ? "Rahul Verma" : patient.id === "PT-1002" ? "Aisha Khan" : "Leena Joseph";
+
+  return (
+    <Card title="Care team" action={<button type="button" className="ay-ghost-button">View all</button>}>
+      <div className="ay-team-list">
+        {[
+          { name: patient.nurse, role: "Primary Nurse", icon: "nurse" as const },
+          { name: physicianName, role: "Primary Physician", icon: "stethoscope" as const },
+          { name: patient.pharmacist, role: "Pharmacist", icon: "pharmacist" as const }
+        ].map((member) => (
+          <div key={member.name} className="ay-team-member">
+            <span className="ay-icon-badge large">
+              <MedicalIcon name={member.icon} />
+            </span>
+            <div>
+              <strong>{member.name}</strong>
+              <span>{member.role}</span>
+            </div>
+            <em>Online</em>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function PatientView({ patient }: { patient: Patient }) {
+  const riskLabel = patient.risk === "High priority" ? "High Risk" : patient.risk === "Watch closely" ? "Medium Risk" : "Stable";
+  const riskScore = patient.risk === "High priority" ? 0.82 : patient.risk === "Watch closely" ? 0.64 : 0.28;
+  const patientStages: JourneyStep[] = [
+    { name: "Intake", status: "Completed", detail: "Completed on 12 Apr, 10:32 AM", meta: "Documents and onboarding complete", icon: "calendar" },
+    { name: "Assessment", status: patient.journeyStage === "Assessment" || patient.journeyStage === "Monitoring" ? "In Progress" : "Completed", detail: "Current focus", meta: "AI-assisted review of current condition", icon: "heart" },
+    { name: "Treatment", status: patient.risk === "High priority" || !/on hand/i.test(patient.refillStatus) ? "Attention" : patient.journeyStage === "Treatment" ? "In Progress" : "Upcoming", detail: patient.barrier, meta: patient.refillStatus, icon: "pill" },
+    { name: "Monitoring", status: patient.journeyStage === "Monitoring" ? "In Progress" : patient.journeyStage === "Recovery" ? "Completed" : "Upcoming", detail: "First reading scheduled", meta: patient.appointment, icon: "pulse" },
+    { name: "Recovery", status: patient.journeyStage === "Recovery" ? "In Progress" : "Upcoming", detail: "Follow-up visit planned", meta: "Continue guided wellness support", icon: "shield" }
+  ];
+  const patientTimeline = [
+    { label: "Intake completed", detail: "All documents received", meta: "12 Apr - 10:32 AM", icon: "calendar" as const },
+    { label: "Vitals received", detail: "Data from device synced", meta: "12 Apr - 11:00 AM", icon: "pulse" as const },
+    { label: "AI risk flagged", detail: `${riskLabel} detected from current signals`, meta: "12 Apr - 11:05 AM", icon: "spark" as const },
+    { label: "Nurse notified", detail: "Review in progress", meta: "12 Apr - 11:10 AM", icon: "nurse" as const },
+    { label: "Next check", detail: "Follow-up visit scheduled", meta: patient.appointment, icon: "camera" as const }
+  ];
+
+  return (
+    <div className="ay-board ay-journey-board">
       <div className="ay-topbar">
         <div>
-          <span className="ay-pill">Patient dashboard</span>
-          <h2>Good morning, {patient.name.split(" ")[0]}.</h2>
-          <p>{patient.diagnosis}. Assigned nurse {patient.nurse} and pharmacist {patient.pharmacist} are following today&apos;s plan.</p>
+          <span className="ay-pill">Patient care journey</span>
+          <h2>Hello, {patient.name.split(" ")[0]}.</h2>
+          <p>Real-time overview of care progress, AI insights, and clinical updates for {patient.diagnosis.toLowerCase()}.</p>
         </div>
-        <span className={badgeClass(patient.risk)}>{patient.risk}</span>
+        <JourneyLegend />
       </div>
-      <div className="ay-grid-3">
-        <Card title="What to do now"><ul className="ay-list"><li>Take morning dose of {patient.medication}.</li><li>{patient.nextAction}.</li><li>Log oxygen and temperature before noon.</li></ul></Card>
-        <Card title="Medicines"><div className="ay-stack"><StatCard label="Medication" value={patient.medication} detail="Next dose in 35 minutes" /><StatCard label="Refill status" value={patient.refillStatus} detail={patient.barrier} /></div></Card>
-        <Card title="When to call for help"><ul className="ay-list"><li>Breathing feels worse than yesterday.</li><li>Fever rises above plan threshold.</li><li>You cannot access medicine or transportation.</li></ul></Card>
+      <JourneyStrip stages={patientStages} />
+      <div className="ay-journey-content patient">
+        <Card title="Current stage">
+          <div className="ay-stage-summary">
+            <div>
+              <strong>{patient.journeyStage}</strong>
+              <em className="ay-pill">AI Enabled</em>
+            </div>
+            <p>AI-assisted evaluation of patient condition using live vitals, history, discharge data, and medication continuity signals.</p>
+            <div className="ay-risk-score">
+              <label>AI Risk Score</label>
+              <strong>{riskScore.toFixed(2)}</strong>
+              <span>{riskLabel}</span>
+              <div className="ay-progress"><span style={{ width: `${Math.round(riskScore * 100)}%` }} /></div>
+            </div>
+            <div className="ay-review-state">
+              <strong>Review status</strong>
+              <span>Nurse review in progress - Updated 2 min ago</span>
+            </div>
+          </div>
+        </Card>
+        <Card title="Live vitals (Latest)" action={<span className="ay-badge success">Streaming</span>}>
+          <div className="ay-vitals ay-vitals-journey">
+            {patient.vitals.slice(0, 3).map((vital) => (
+              <StatCard key={vital.label} label={vital.label} value={vital.value} detail={vital.note} />
+            ))}
+          </div>
+          <button type="button" className="ay-inline-banner">
+            <span className="ay-inline-chip"><MedicalIcon name="spark" /> AI Insight</span>
+            <strong>{patient.barrier === "None" ? "Recovery is progressing with stable signals." : `${patient.barrier} detected in the last 30 minutes.`}</strong>
+            <em>View details &rarr;</em>
+          </button>
+        </Card>
+        <div className="ay-journey-side">
+          <AlertStack
+            title="Alerts"
+            items={[
+              { label: patient.risk === "Routine" ? "No urgent alert triggered" : `${patient.vitals[0].label} needs review`, detail: patient.vitals[0].note, tone: patient.risk === "High priority" ? "danger" : "warning" },
+              { label: patient.refillStatus, detail: patient.barrier, tone: /on hand/i.test(patient.refillStatus) ? "info" : "warning" }
+            ]}
+          />
+          <ActionStack title="Actions" items={["Escalate to Nurse", "Review AI Summary", "Start Virtual Consultation"]} />
+        </div>
       </div>
       <div className="ay-grid-2">
-        <Card title="Appointments"><ul className="ay-list"><li><strong>{patient.appointment}</strong><span>Ride or virtual check-in confirmed</span></li><li><strong>Lab check</strong><span>Tomorrow 09:00 AM - bring medication list</span></li></ul></Card>
-        <Card title="Progress checklist"><div className="ay-progress"><span style={{ width: "72%" }} /></div><ul className="ay-list"><li>Medication reminder complete</li><li>Appointment confirmed</li><li>Vitals check pending</li></ul></Card>
+        <TimelineCard title="Journey timeline" items={patientTimeline} />
+        <TeamCard patient={patient} />
       </div>
-      <div className="ay-grid-2">
-        <Card title="Vital snapshot"><div className="ay-vitals">{patient.vitals.map((vital) => <StatCard key={vital.label} label={vital.label} value={vital.value} detail={vital.note} />)}</div></Card>
-        <CameraPrepCard patient={patient} title="Virtual care camera" />
-      </div>
+      <CameraPrepCard patient={patient} title="Virtual consultation" />
     </div>
   );
 }
 
 function NurseView() {
   const queue = priorityPatients().slice(0, 6);
+  const focusedPatient = queue[0];
+  const nurseStages: JourneyStep[] = [
+    { name: "Intake", status: "Completed", detail: "Completed", meta: "12 Apr, 10:32 AM", icon: "calendar" },
+    { name: "Assessment", status: "In Progress", detail: `${queue.filter((patient) => patient.journeyStage === "Assessment" || patient.risk !== "Routine").length} patients`, meta: "Current nursing focus", icon: "heart" },
+    { name: "Treatment", status: queue.some((patient) => patient.risk === "High priority") ? "Attention" : "In Progress", detail: `${queue.filter((patient) => patient.risk === "High priority").length} patients need review`, meta: "Medication and escalation review", icon: "pill" },
+    { name: "Monitoring", status: "Upcoming", detail: `${queue.length} patients`, meta: "Remote vitals and callbacks", icon: "pulse" },
+    { name: "Recovery", status: "Upcoming", detail: "Follow-ups planned", meta: "Care continuity checks", icon: "shield" }
+  ];
+  const nurseTimeline: Array<{ label: string; detail: string; meta: string; icon: IconName }> = queue.slice(0, 5).map((patient, index) => ({
+    label: index === 0 ? "Intake completed" : index === 1 ? "Vitals received" : index === 2 ? "AI risk summary" : index === 3 ? "Nurse assigned" : "Note added",
+    detail:
+      index === 0
+        ? `${patient.name} onboarded`
+        : index === 1
+          ? `Latest reading synced for ${patient.name}`
+          : index === 2
+            ? `${patient.name}: ${patient.risk}`
+            : index === 3
+              ? `${patient.name} assigned to ${patient.nurse}`
+              : `${patient.nextAction}`,
+    meta: `${patient.appointment}`,
+    icon: index === 0 ? "calendar" : index === 1 ? "pulse" : index === 2 ? "spark" : index === 3 ? "nurse" : "message"
+  }));
+
   return (
-    <div className="ay-board">
-      <div className="ay-topbar"><div><span className="ay-pill">Nurse dashboard</span><h2>Shift triage queue</h2><p>Monitor high-priority follow-ups, vitals drift, missed medications, and unresolved transport issues.</p></div></div>
-      <div className="ay-kpis"><StatCard label="High priority" value={patients.filter((p) => p.risk === "High priority").length} detail="Immediate review" /><StatCard label="Watch closely" value={patients.filter((p) => p.risk === "Watch closely").length} detail="Same-day follow-up" /><StatCard label="Logistics blockers" value={patients.filter((p) => p.barrier !== "None").length} detail="Transport or refill" /><StatCard label="Avg response" value="12m" detail="Team callback speed" /></div>
-      <div className="ay-grid-2"><Card title="Patient queue"><table className="ay-table"><tbody>{queue.map((p) => <tr key={p.id}><td>{p.name}</td><td><span className={badgeClass(p.risk)}>{p.risk}</span></td><td>{p.barrier}</td><td>{p.nextAction}</td></tr>)}</tbody></table></Card><Card title="Current patient summary"><ul className="ay-list">{queue.slice(0, 4).map((p) => <li key={p.id}><strong>{p.name}</strong><span>{p.diagnosis} - {p.nextAction}</span></li>)}</ul></Card></div>
+    <div className="ay-board ay-journey-board">
+      <div className="ay-topbar">
+        <div>
+          <span className="ay-pill">Nurse care journey</span>
+          <h2>Nurse care journey</h2>
+          <p>Real-time overview of patient progress, triage responsibilities, and follow-up coordination.</p>
+        </div>
+        <JourneyLegend />
+      </div>
+      <JourneyStrip stages={nurseStages} />
+      <div className="ay-journey-content nurse">
+        <Card title={`My assignments`} action={<span className="ay-badge info">{queue.length}</span>}>
+          <div className="ay-person-list">
+            {queue.map((item) => (
+              <button key={item.id} type="button" className={`ay-person-row ${item.id === focusedPatient.id ? "active" : ""}`}>
+                <span className="ay-icon-badge large">
+                  <MedicalIcon name="patient" />
+                </span>
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.id} - {item.diagnosis}</span>
+                  <small>{item.vitals[0].note}</small>
+                </div>
+                <em className={badgeClass(item.journeyStage === "Assessment" ? "In Progress" : item.risk)}>{item.journeyStage}</em>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card title={focusedPatient.name} action={<button type="button" className="ay-ghost-button">View patient profile</button>}>
+          <div className="ay-patient-focus-head">
+            <div>
+              <strong>{focusedPatient.id}</strong>
+              <span>{focusedPatient.diagnosis}</span>
+            </div>
+            <span className={`ay-badge ${badgeClass(focusedPatient.journeyStage === "Assessment" ? "In Progress" : focusedPatient.risk)}`}>{focusedPatient.journeyStage}</span>
+          </div>
+          <div className="ay-vitals ay-vitals-journey four">
+            {focusedPatient.vitals.slice(0, 4).map((vital) => (
+              <StatCard key={vital.label} label={vital.label} value={vital.value} detail={vital.note} />
+            ))}
+          </div>
+          <Card title="Care tasks" className="ay-subcard">
+            <div className="ay-task-list">
+              {[
+                `Complete nursing assessment for ${focusedPatient.name}`,
+                `Review AI risk summary for ${focusedPatient.name}`,
+                `Patient education: medication and diet guidance`
+              ].map((task, index) => (
+                <div key={task} className="ay-task-row">
+                  <div>
+                    <strong>{task}</strong>
+                    <span>{index === 0 ? "Due in 30 min" : index === 1 ? "Completed" : "Due today, 05:00 PM"}</span>
+                  </div>
+                  <button type="button" className={index === 1 ? "ay-ghost-button" : "ay-secondary-button"}>{index === 1 ? "View" : "Start"}</button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </Card>
+        <div className="ay-journey-side">
+          <AlertStack
+            title="Alerts"
+            items={[
+              { label: "High heart rate detected", detail: focusedPatient.name, tone: "danger" },
+              { label: "Medication review pending", detail: queue[1]?.name ?? focusedPatient.name, tone: "warning" },
+              { label: "Missed reading", detail: queue[2]?.name ?? focusedPatient.name, tone: "warning" }
+            ]}
+          />
+          <ActionStack title="Quick actions" items={["Add Clinical Note", "Escalate to Doctor", "Send Patient Message", "Schedule Follow-up"]} />
+        </div>
+      </div>
+      <div className="ay-grid-2">
+        <TimelineCard title="Recent activity" items={nurseTimeline} />
+        <Card title="Patients overview" action={<button type="button" className="ay-ghost-button">View full list</button>}>
+          <div className="ay-kpis compact">
+            <StatCard label="Total patients" value={queue.length * 4} detail="Across assigned caseloads" />
+            <StatCard label="In progress" value={queue.filter((patient) => patient.journeyStage === "Assessment" || patient.journeyStage === "Monitoring").length} detail="Needs same-day follow-up" />
+            <StatCard label="Attention" value={queue.filter((patient) => patient.risk === "High priority").length} detail="Escalation or intervention" />
+            <StatCard label="Completed" value={queue.filter((patient) => patient.journeyStage === "Recovery").length} detail="Lower-intensity follow-up" />
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
 
 function PharmacistView() {
   const queue = patients.filter((patient) => patient.refillStatus !== "On hand" || patient.risk !== "Routine");
+  const focusedPatient = queue[0] ?? patients[0];
+  const pharmacistStages: JourneyStep[] = [
+    { name: "Intake", status: "Completed", detail: "Completed", meta: "12 Apr, 10:32 AM", icon: "calendar" },
+    { name: "Assessment", status: "Completed", detail: "Completed", meta: "Medication history reviewed", icon: "heart" },
+    { name: "Treatment", status: "In Progress", detail: "Medication review", meta: "Current pharmacist focus", icon: "pill" },
+    { name: "Monitoring", status: "Upcoming", detail: "First reading scheduled", meta: focusedPatient.appointment, icon: "pulse" },
+    { name: "Recovery", status: "Upcoming", detail: "Follow-up visit planned", meta: "Medication continuity check", icon: "shield" }
+  ];
+  const medicationSummary = {
+    active: queue.length + 4,
+    newPrescriptions: queue.filter((patient) => /insurance|review|hold/i.test(patient.refillStatus)).length,
+    discontinued: 0,
+    refillsDue: queue.filter((patient) => !/on hand/i.test(patient.refillStatus)).length
+  };
+  const pharmacistTimeline: Array<{ label: string; detail: string; meta: string; icon: IconName }> = queue.slice(0, 5).map((patient, index) => ({
+    label: index === 0 ? "Intake completed" : index === 1 ? "Vitals received" : index === 2 ? "AI risk summary" : index === 3 ? "Medication review" : "Follow-up visit",
+    detail:
+      index === 0
+        ? "All documents received"
+        : index === 1
+          ? `Data synced for ${patient.name}`
+          : index === 2
+            ? `${patient.name}: ${patient.risk}`
+            : index === 3
+              ? `${patient.medication} reviewed`
+              : "Scheduled",
+    meta: patient.appointment,
+    icon: index === 3 ? "pharmacist" : index === 4 ? "calendar" : index === 2 ? "spark" : "pulse"
+  }));
+
   return (
-    <div className="ay-board">
-      <div className="ay-topbar"><div><span className="ay-pill">Pharmacist dashboard</span><h2>Medication coordination board</h2><p>Track refill work, adherence risks, insurance access issues, and delivery or pickup blockers.</p></div></div>
-      <div className="ay-kpis"><StatCard label="Open refill tasks" value={queue.length} detail="Needs action today" /><StatCard label="Insurance issues" value={queue.filter((p) => /insurance/i.test(p.refillStatus)).length} detail="Verification needed" /><StatCard label="Pickup barriers" value={queue.filter((p) => /pickup|transport/i.test(p.barrier)).length} detail="Caregiver or courier gap" /><StatCard label="Adherence risks" value={queue.filter((p) => /confusion|missed/i.test(p.barrier)).length} detail="Counseling needed" /></div>
-      <div className="ay-grid-2"><Card title="Medication queue"><table className="ay-table"><tbody>{queue.slice(0, 7).map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.medication}</td><td><span className={badgeClass(p.refillStatus)}>{p.refillStatus}</span></td><td>{p.barrier}</td></tr>)}</tbody></table></Card><Card title="Pharmacist workload"><ul className="ay-list">{pharmacists.map((p) => <li key={p.id}><strong>{p.name}</strong><span>{p.fillsToday} fills today - {p.queueSize} queue items</span></li>)}</ul></Card></div>
+    <div className="ay-board ay-journey-board">
+      <div className="ay-topbar">
+        <div>
+          <span className="ay-pill">Pharmacist care journey</span>
+          <h2>Pharmacist care journey</h2>
+          <p>Real-time overview of medication management, review tasks, and patient safety signals.</p>
+        </div>
+        <JourneyLegend />
+      </div>
+      <JourneyStrip stages={pharmacistStages} />
+      <div className="ay-journey-content pharmacist">
+        <Card title="Patient queue" action={<span className="ay-badge info">{queue.length}</span>}>
+          <div className="ay-person-list">
+            {queue.map((item) => (
+              <button key={item.id} type="button" className={`ay-person-row ${item.id === focusedPatient.id ? "active" : ""}`}>
+                <span className="ay-icon-badge large">
+                  <MedicalIcon name="patient" />
+                </span>
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.id} - {item.diagnosis}</span>
+                  <small>{item.medication}</small>
+                </div>
+                <em className={badgeClass(item.refillStatus)}>{item.refillStatus}</em>
+              </button>
+            ))}
+          </div>
+        </Card>
+        <Card title={focusedPatient.name} action={<button type="button" className="ay-ghost-button">View patient profile</button>}>
+          <div className="ay-patient-focus-head">
+            <div>
+              <strong>{focusedPatient.medication}</strong>
+              <span>{focusedPatient.diagnosis}</span>
+            </div>
+            <span className="ay-badge info">AI Assisted</span>
+          </div>
+          <div className="ay-kpis compact">
+            <StatCard label="Total medications" value="7" detail="Active" />
+            <StatCard label="Drug interactions" value={focusedPatient.risk === "High priority" ? "1" : "0"} detail={focusedPatient.risk === "High priority" ? "High risk" : "No high-risk signal"} />
+            <StatCard label="Duplicate therapy" value="0" detail="Detected" />
+            <StatCard label="Allergy alerts" value="0" detail="Found" />
+          </div>
+          <div className="ay-interaction-banner danger">
+            <div>
+              <strong>{focusedPatient.medication}</strong>
+              <span>{focusedPatient.barrier}</span>
+            </div>
+            <em>{focusedPatient.risk === "High priority" ? "Risk: High" : "Review Pending"}</em>
+            <button type="button" className="ay-ghost-button">View details</button>
+          </div>
+          <Card title="Pharmacy tasks" className="ay-subcard">
+            <div className="ay-task-list">
+              {[
+                `Review and resolve medication issue for ${focusedPatient.name}`,
+                `Verify prescription with assigned physician`,
+                `Patient counseling: continuity and pickup support`
+              ].map((task, index) => (
+                <div key={task} className="ay-task-row">
+                  <div>
+                    <strong>{task}</strong>
+                    <span>{index === 0 ? "Due in 30 min" : index === 1 ? "Due in 45 min" : "Due today, 05:00 PM"}</span>
+                  </div>
+                  <button type="button" className="ay-secondary-button">Start</button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </Card>
+        <div className="ay-journey-side">
+          <AlertStack
+            title="Alerts"
+            items={[
+              { label: "High risk drug interaction", detail: focusedPatient.name, tone: "danger" },
+              { label: "Prescription clarification needed", detail: queue[1]?.name ?? focusedPatient.name, tone: "warning" },
+              { label: "Allergy information missing", detail: queue[2]?.name ?? focusedPatient.name, tone: "warning" }
+            ]}
+          />
+          <ActionStack title="Quick actions" items={["Verify Prescription", "Add Medication Note", "Patient Counseling", "Medication Reconciliation", "Send Message to Nurse"]} />
+        </div>
+      </div>
+      <div className="ay-grid-2">
+        <TimelineCard title="Recent activity" items={pharmacistTimeline} />
+        <Card title="Medication summary" action={<button type="button" className="ay-ghost-button">View full list</button>}>
+          <div className="ay-kpis compact">
+            <StatCard label="Active medications" value={medicationSummary.active} detail="Current patient queue" />
+            <StatCard label="New prescriptions" value={medicationSummary.newPrescriptions} detail="Need verification" />
+            <StatCard label="Discontinued" value={medicationSummary.discontinued} detail="No new removals" />
+            <StatCard label="Refills due" value={medicationSummary.refillsDue} detail="Needs same-day action" />
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -720,19 +1619,43 @@ function HomeView() {
   const now = useCurrentTime();
   const dateInfo = formatDateTime(now);
   const topPatient = priorityPatients()[0];
+  const workspaceActions = [
+    ...homeActions,
+    {
+      label: "Developer board",
+      href: "/developer",
+      icon: "developer" as const,
+      detail: "Observe traces, agent health, guardrails, and live multi-agent orchestration signals."
+    }
+  ];
+  const supportPillars = [
+    {
+      icon: "heart" as const,
+      title: "Personalized support",
+      detail: "Clear role-based pathways help patients, families, and care teams stay aligned after discharge."
+    },
+    {
+      icon: "calendar" as const,
+      title: "Care plan management",
+      detail: "Appointments, reminders, and follow-up activities remain visible in one calm coordination experience."
+    },
+    {
+      icon: "pulse" as const,
+      title: "Follow-up monitoring",
+      detail: "Vitals, symptom review, and next-step coordination stay connected without overwhelming the user."
+    },
+    {
+      icon: "pill" as const,
+      title: "Medication continuity",
+      detail: "Refill access, pickup support, and pharmacy coordination are surfaced early to reduce missed doses."
+    }
+  ];
   const [tickerMessages, setTickerMessages] = useState<string[]>([positiveQuote]);
 
   useEffect(() => {
-    const messages = shuffleMessages([
-      positiveQuote,
-      `${topPatient.name} is the top coordination focus today.`,
-      `Current journey stage: ${topPatient.journeyStage}.`,
-      `Assigned nurse: ${topPatient.nurse}.`,
-      `Medication continuity: ${topPatient.refillStatus}.`,
-      `Barrier to resolve: ${topPatient.barrier}.`
-    ]);
+    const messages = shuffleMessages(approvedHomeRibbonMessages(HOME_POSITIVE_MESSAGES));
     setTickerMessages(messages);
-  }, [topPatient]);
+  }, []);
 
   return (
     <div className="ay-board">
@@ -750,57 +1673,60 @@ function HomeView() {
           <strong>{dateInfo.timeLabel}</strong>
         </div>
       </section>
-      <div className="ay-hero">
-        <Card className="ay-hero-card ay-hero-copy">
-          <span className="ay-pill">ArogyaYatra</span>
-          <h2>AI Enabled Integrated co-ordination journey for post-discharge virtual care.</h2>
-          <p>Arogya means wellness and Yatra means journey. We are on an AI enabled wellness journey for a better future together.</p>
-          <div className="ay-feature-strip">
-            <span className="ay-feature-chip"><span className="ay-icon-badge"><MedicalIcon name="heart" /></span> Recovery journey</span>
-            <span className="ay-feature-chip"><span className="ay-icon-badge"><MedicalIcon name="pulse" /></span> Vitals monitoring</span>
-            <span className="ay-feature-chip"><span className="ay-icon-badge"><MedicalIcon name="pill" /></span> Medication continuity</span>
-            <span className="ay-feature-chip"><span className="ay-icon-badge"><MedicalIcon name="camera" /></span> Virtual visit prep</span>
+      <Card className="ay-home-hero-banner-card">
+        <div className="ay-home-hero-banner">
+          <Image src="/homepage-banner-wide.png" alt="ArogyaYatra integrated co-ordination journey banner" width={1672} height={1080} priority />
+        </div>
+      </Card>
+      <Card className="ay-home-action-ribbon-card">
+        <div className="ay-home-action-ribbon">
+          <div className="ay-home-action-copy">
+            <span className="ay-kicker">Available Workspaces</span>
+            <strong>Choose a role</strong>
+            <span>Select the workspace that matches how you want to use ArogyaYatra today.</span>
           </div>
-          <div className="ay-actions">{homeActions.map((item) => <Link key={item.href} className="ay-button" href={item.href}>{item.label}</Link>)}</div>
-        </Card>
-        <Card className="ay-hero-card ay-hero-media">
-          <div className="ay-home-banner">
-            <Image src="/homepage-banner.png" alt="ArogyaYatra post-discharge virtual care banner" width={1000} height={400} priority />
+          <div className="ay-home-workspace-grid">
+            {workspaceActions.map((item) => (
+              <WorkspaceCard key={item.href} icon={item.icon} title={item.label} detail={item.detail} href={item.href} />
+            ))}
           </div>
-        </Card>
-      </div>
-      <Card title="Care journey">
-        <div className="ay-journey">
-          {journeyStages.map((stage) => (
-            <div key={stage} className={`ay-stage ${stage === topPatient.journeyStage ? "current" : ""}`}>
-              <span>{stage}</span>
-              <strong>{stage === topPatient.journeyStage ? "Current focus" : "Ready"}</strong>
-            </div>
+        </div>
+      </Card>
+      <Card title="How ArogyaYatra helps" className="ay-support-pillars-card">
+        <div className="ay-support-pillars">
+          {supportPillars.map((item) => (
+            <SupportPillar key={item.title} icon={item.icon} title={item.title} detail={item.detail} />
           ))}
+        </div>
+      </Card>
+      <Card className="ay-care-journey-image-card">
+        <div className="ay-care-journey-image">
+          <Image src="/care_journey_home_page.png" alt="ArogyaYatra care journey overview" width={1919} height={795} />
         </div>
       </Card>
       <div className="ay-grid-3">
         <Card title="Care support today">
           <div className="ay-kpis compact"><StatCard label="Patients" value={patients.length} detail="MVP care cohort" /><StatCard label="Nurses" value={nurses.length} detail="Daily workload model" /><StatCard label="Pharmacists" value={pharmacists.length} detail="Refill access model" /><StatCard label="Virtual visits" value="Ready" detail="Pre-call check available" /></div>
         </Card>
-        <Card title="Top coordination need">
+        <Card title="Customer support pathways">
           <ul className="ay-list">
-            <li><strong><span className="ay-inline-icon"><MedicalIcon name="heart" /></span>{topPatient.name}</strong><span>{topPatient.risk} - {topPatient.nextAction}</span></li>
-            <li><strong><span className="ay-inline-icon"><MedicalIcon name="stethoscope" /></span>Care team</strong><span>Nurse {topPatient.nurse}; pharmacist {topPatient.pharmacist}</span></li>
-            <li><strong><span className="ay-inline-icon"><MedicalIcon name="shield" /></span>Barrier</strong><span>{topPatient.barrier}</span></li>
+            <li><strong><span className="ay-inline-icon"><MedicalIcon name="patient" /></span>Patient support</strong><span>Recovery guidance, medicines, and virtual visit readiness in one place.</span></li>
+            <li><strong><span className="ay-inline-icon"><MedicalIcon name="nurse" /></span>Nurse coordination</strong><span>Daily triage review and same-day follow-up for higher-risk recovery paths.</span></li>
+            <li><strong><span className="ay-inline-icon"><MedicalIcon name="pharmacist" /></span>Pharmacy continuity</strong><span>Refill blockers, insurance access, and pickup support without hidden handoffs.</span></li>
+            <li><strong><span className="ay-inline-icon"><MedicalIcon name="shield" /></span>Safe oversight</strong><span>Clear escalation logic and guided workflows support safer healthcare coordination.</span></li>
           </ul>
         </Card>
         <CameraPrepCard patient={topPatient} title="Virtual consultation" />
       </div>
       <div className="ay-grid-2">
-        <Card title="Developer feedback board">
+        <Card title="AI Enabled Feedback">
           <ul className="ay-list">
-            <li><strong>Capture page feedback</strong><span>Open the developer board from any page with source context already attached.</span></li>
+            <li><strong>Capture page feedback</strong><span>Open AI Enabled Feedback from any page with source context already attached.</span></li>
             <li><strong>Generate AI prompts</strong><span>Turn workflow feedback into a ChatGPT-ready prompt customized for patient, nurse, customer, pharmacist, or admin use.</span></li>
             <li><strong>Stay user-centered</strong><span>Keep AI features aligned with real needs before implementation.</span></li>
           </ul>
           <div className="ay-actions">
-            <Link className="ay-button ay-button-secondary" href={`/developer?sourceRole=home&patientId=${topPatient.id}`}>Open developer board</Link>
+            <Link className="ay-button ay-button-secondary" href={`/feedback?sourceRole=home&patientId=${topPatient.id}`}>Open AI Enabled Feedback</Link>
           </div>
         </Card>
         <Card title="Current month">
@@ -823,22 +1749,63 @@ export function ArogyaYatraDashboard({
   developerPatientId?: string;
 }) {
   const [selection, setSelection] = useState<EntitySelection>(null);
+  const [smartClicks, setSmartClicks] = useState(false);
   const patient = useMemo(() => getPatientById(patientId), [patientId]);
   const role = initialRole;
-  const feedbackHref = `/developer?sourceRole=${role}&patientId=${patient.id}`;
+  const feedbackSourceRole = role === "feedback" ? "home" : role;
+  const feedbackHref = `/feedback?sourceRole=${feedbackSourceRole}&patientId=${patient.id}`;
 
   return (
-    <div className="ay-shell">
+    <div className={`ay-shell${smartClicks ? " ay-smart-clicks-active" : ""}`}>
+      <button
+        type="button"
+        className={`ay-smart-clicks-toggle${smartClicks ? " active" : ""}`}
+        aria-pressed={smartClicks}
+        onClick={() => setSmartClicks((value) => !value)}
+      >
+        <span>SMART CLICKS</span>
+        <strong>{smartClicks ? "Back to normal view" : "Highlight what can be clicked"}</strong>
+      </button>
       <aside className="ay-sidebar">
         <Link href="/" className="ay-brand">
           <Image src="/arogyayatra-logo.png" alt="ArogyaYatra logo" width={58} height={58} />
           <div><strong>ArogyaYatra</strong><span>AI enabled Healthcare Coordinator</span></div>
         </Link>
+        <div className="ay-sidebar-intro">
+          <strong>AI-powered care coordination platform</strong>
+          <span>Bringing patients, nurses, pharmacists, and care teams together for a better recovery journey.</span>
+        </div>
+        <div className="ay-sidebar-trust-box">
+          <span className="ay-icon-badge">
+            <MedicalIcon name="shield" />
+          </span>
+          <div>
+            <strong>Trusted for secure virtual care</strong>
+            <span>Your access is protected through role-aware workflows and safe review.</span>
+          </div>
+        </div>
+        <SidebarMockAuth role={role} patient={patient} />
         <nav>
-          {navItems.map((item) => <Link key={item.id} href={item.href} className={role === item.id || (role === "admin" && item.id === "home") ? "active" : ""}>{item.label}</Link>)}
+          {navItems.map((item) => (
+            <Link key={item.id} href={item.href} className={role === item.id ? "active" : ""}>
+              <span className="ay-nav-icon">
+                <MedicalIcon name={item.icon} />
+              </span>
+              <span className="ay-nav-copy">
+                <strong>{item.label}</strong>
+                <span>{item.hint}</span>
+              </span>
+            </Link>
+          ))}
         </nav>
         <div className="ay-sidebar-actions">
-          <Link href={feedbackHref} className="ay-sidebar-feedback">Send feedback from this page</Link>
+          <Link href={feedbackHref} className="ay-sidebar-feedback">Help us improve</Link>
+          <div className="ay-sidebar-footer-note">
+            <span className="ay-icon-badge">
+              <MedicalIcon name="shield" />
+            </span>
+            <span>Your data is secure and compliant with healthcare privacy standards.</span>
+          </div>
         </div>
       </aside>
       <main className="ay-main">
@@ -847,10 +1814,12 @@ export function ArogyaYatraDashboard({
         {role === "patient" ? <PatientView patient={patient} /> : null}
         {role === "nurse" ? <NurseView /> : null}
         {role === "pharmacist" ? <PharmacistView /> : null}
-        {role === "developer" ? <DeveloperView currentRole={role} currentPatient={patient} sourceRoleFromQuery={developerSourceRole} patientIdFromQuery={developerPatientId} /> : null}
+        {role === "developer" ? <DeveloperConsoleView /> : null}
+        {role === "feedback" ? <DeveloperView currentRole={role} currentPatient={patient} sourceRoleFromQuery={developerSourceRole} patientIdFromQuery={developerPatientId} /> : null}
       </main>
       <Assistant role={role} patient={patient} />
       <EntityModal selection={selection} onClose={() => setSelection(null)} />
     </div>
   );
 }
+

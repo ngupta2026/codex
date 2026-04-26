@@ -26,11 +26,14 @@ function pageSummary(role: Role): string {
   if (role === "patient") return "Patient page for medicines, vitals, appointments, safety guidance, and virtual visit preparation.";
   if (role === "nurse") return "Nurse page for triage queue, active follow-up, and workload management.";
   if (role === "pharmacist") return "Pharmacist page for refill blockers, medication queue, and adherence support.";
-  return "Developer page for capturing feedback and generating AI feature prompts.";
+  if (role === "feedback") return "AI Enabled Feedback page for capturing workflow feedback and generating AI feature prompts.";
+  return "Developer page for agentic system observability, control, and AI workflow operations.";
 }
 
 function safeRole(role: Role): string {
-  return role === "developer" ? "developer board" : `${role} page`;
+  if (role === "developer") return "developer board";
+  if (role === "feedback") return "AI Enabled Feedback board";
+  return `${role} page`;
 }
 
 export function buildDeveloperPrompt(input: DeveloperPromptInput): { prompt: string; contextSummary: string } {

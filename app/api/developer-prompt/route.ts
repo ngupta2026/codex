@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { buildDeveloperPrompt, type AIGoal, type DeveloperPromptInput, type FeedbackUserType } from "@/lib/developer-prompts";
 import { patients, type Role } from "@/lib/arogyayatra-data";
 
-const roles = new Set<Role>(["home", "admin", "patient", "nurse", "pharmacist", "developer"]);
+const roles = new Set<Role>(["home", "admin", "patient", "nurse", "pharmacist", "developer", "feedback"]);
 const userTypes = new Set<FeedbackUserType>(["customer", "patient", "nurse", "pharmacist", "admin", "caregiver", "developer"]);
 const goals = new Set<AIGoal>([
   "personalized guidance",

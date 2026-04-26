@@ -160,3 +160,11 @@ export type DemoCase = {
   nurse_view: NurseView;
   pharmacist_view: PharmacistView;
 };
+
+export type ResolvedCase = {
+  input: CaseInput;
+  response: ResponseContract;
+  patient_view: PatientView;
+  nurse_view: NurseView;
+  pharmacist_view: PharmacistView;
+};

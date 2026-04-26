@@ -2,6 +2,7 @@ import {
   ActionTimeline,
   DemoCase,
   MISSING_VALUE,
+  ResolvedCase,
   ResponseContract,
   RuntimeMode,
   Scenario
@@ -59,10 +60,9 @@ function buildActionTimeline(status: Scenario): ActionTimeline {
   };
 }
 
-export function resolveDemoCase(scenario: Scenario, mode: RuntimeMode): DemoCase {
+export function resolveCaseInput(input: import("@/lib/contracts").CaseInput, mode: RuntimeMode): ResolvedCase {
   const yamlContext = loadPromptConfigSummary();
   const policy = new EscalationPolicyEngine();
-  const input = getScenarioInput(scenario);
   const reasoningLog: string[] = [];
 
   const [checklist, risk, logistics, medication] = [
@@ -125,6 +125,19 @@ export function resolveDemoCase(scenario: Scenario, mode: RuntimeMode): DemoCase
   response.missing_fields = review.missingFields;
 
   return {
+    input,
+    response,
+    patient_view: projectPatientView(response, checklist, logistics),
+    nurse_view: projectNurseView(response, logistics),
+    pharmacist_view: projectPharmacistView(response, medication)
+  };
+}
+
+export function resolveDemoCase(scenario: Scenario, mode: RuntimeMode): DemoCase {
+  const input = getScenarioInput(scenario);
+  const resolved = resolveCaseInput(input, mode);
+
+  return {
     case_id: input.case_id,
     patient_id: input.patient_id,
     patient_name: input.patient_name,
@@ -132,9 +145,9 @@ export function resolveDemoCase(scenario: Scenario, mode: RuntimeMode): DemoCase
     scenario,
     mode,
     execution_mode: MODE_LABELS[mode],
-    response,
-    patient_view: projectPatientView(response, checklist, logistics),
-    nurse_view: projectNurseView(response, logistics),
-    pharmacist_view: projectPharmacistView(response, medication)
+    response: resolved.response,
+    patient_view: resolved.patient_view,
+    nurse_view: resolved.nurse_view,
+    pharmacist_view: resolved.pharmacist_view
   };
 }
