@@ -1,11 +1,16 @@
 import {
+  ARCHITECTURE_BOUNDARIES,
+  JOURNEY_STAGE_MODEL,
+  type AppRole,
+  type TraceEventContract
+} from "@/lib/app-foundation";
+import {
   agentCapabilities,
   patientsForNurse,
   patientsForPharmacist,
   priorityNurses,
   priorityPatients,
-  priorityPharmacists,
-  type Role
+  priorityPharmacists
 } from "@/lib/arogyayatra-data";
 import { buildDeveloperPrompt, type AIGoal, type FeedbackUserType } from "@/lib/developer-prompts";
 import { RuntimeMode } from "@/lib/contracts";
@@ -37,7 +42,7 @@ function dedupeFacts(facts: AgentFact[]): AgentFact[] {
   });
 }
 
-function inferDeveloperUserType(role: Role): FeedbackUserType {
+function inferDeveloperUserType(role: AppRole): FeedbackUserType {
   if (role === "patient") return "patient";
   if (role === "nurse") return "nurse";
   if (role === "pharmacist") return "pharmacist";
@@ -57,7 +62,7 @@ function inferDeveloperGoal(question: string): AIGoal {
   return "custom";
 }
 
-function selectTools(role: Role, question: string): AgentToolName[] {
+function selectTools(role: AppRole, question: string): AgentToolName[] {
   const q = question.toLowerCase();
   const tools: AgentToolName[] = [];
 
@@ -81,7 +86,7 @@ function selectTools(role: Role, question: string): AgentToolName[] {
   return dedupeTools(tools);
 }
 
-function runTool(tool: AgentToolName, role: Role, question: string, resolved: ReturnType<typeof resolveCaseInput>) {
+function runTool(tool: AgentToolName, role: AppRole, question: string, resolved: ReturnType<typeof resolveCaseInput>) {
   const context = loadCareContext(role, resolved.input.patient_id);
 
   switch (tool) {
@@ -191,7 +196,7 @@ function runTool(tool: AgentToolName, role: Role, question: string, resolved: Re
   }
 }
 
-function buildTrace(role: Role, question: string, toolResults: AgentToolResult[], contextSummary: string, reviewPassed: boolean, escalationRequired: boolean): AgentTraceStep[] {
+function buildTrace(role: AppRole, question: string, toolResults: AgentToolResult[], contextSummary: string, reviewPassed: boolean, escalationRequired: boolean): AgentTraceStep[] {
   const steps: AgentTraceStep[] = [
     {
       step: 1,
@@ -230,7 +235,7 @@ function buildTrace(role: Role, question: string, toolResults: AgentToolResult[]
   return steps;
 }
 
-function buildAnswer(role: Role, question: string, toolResults: AgentToolResult[], resolved: ReturnType<typeof resolveCaseInput>): string {
+function buildAnswer(role: AppRole, question: string, toolResults: AgentToolResult[], resolved: ReturnType<typeof resolveCaseInput>): string {
   const q = question.toLowerCase();
   const context = loadCareContext(role, resolved.input.patient_id);
 
@@ -280,6 +285,24 @@ function buildAnswer(role: Role, question: string, toolResults: AgentToolResult[
   return toolResults.map((result) => result.summary).join(" ");
 }
 
+function buildTraceEvents(role: AppRole, trace: AgentTraceStep[]): TraceEventContract[] {
+  return trace.map((step) => ({
+    traceId: `trace-${role}-${String(step.step).padStart(2, "0")}`,
+    timestamp: new Date().toISOString(),
+    role,
+    type:
+      step.agent === "Context loader"
+        ? "context_loaded"
+        : step.agent === "Coordinator agent"
+          ? "route_selected"
+          : step.agent === "Reviewer agent"
+            ? "review_completed"
+            : "tool_called",
+    actor: step.agent,
+    summary: step.outputSummary
+  }));
+}
+
 export function runAgenticChat(request: AgenticChatRequest): AgenticChatResponse {
   const runtimeMode: RuntimeMode = request.mode ?? "local_deterministic";
   const context = loadCareContext(request.role, request.patientId);
@@ -295,6 +318,7 @@ export function runAgenticChat(request: AgenticChatRequest): AgenticChatResponse
     missingFields: resolved.response.missing_fields
   };
   const agentsUsed = [...toolResults.map((result) => TOOL_LABELS[result.tool]), "Coordinator agent", "Reviewer agent"];
+  const trace = buildTrace(request.role, request.question, toolResults, contextSummary, review.passed, resolved.response.escalation_required);
 
   return {
     answer,
@@ -308,7 +332,10 @@ export function runAgenticChat(request: AgenticChatRequest): AgenticChatResponse
     safeNextActions: resolved.response.action_timeline.immediate.slice(0, 3),
     policyTriggers: resolved.response.policy_triggers,
     facts,
-    trace: buildTrace(request.role, request.question, toolResults, contextSummary, review.passed, resolved.response.escalation_required),
+    trace,
+    traceEvents: buildTraceEvents(request.role, trace),
+    decisionBoundaries: [...ARCHITECTURE_BOUNDARIES],
+    journeyModel: JOURNEY_STAGE_MODEL,
     review
   };
 }

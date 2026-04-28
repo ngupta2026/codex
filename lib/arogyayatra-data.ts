@@ -1,4 +1,6 @@
-export type Role = "home" | "admin" | "patient" | "nurse" | "pharmacist" | "developer" | "feedback";
+import type { AppRole, JourneyStage } from "@/lib/app-foundation";
+
+export type Role = AppRole;
 export type Risk = "High priority" | "Watch closely" | "Routine";
 export type AuthStatus = "active" | "invited";
 
@@ -26,7 +28,7 @@ export type Patient = {
   nextAction: string;
   appointment: string;
   messages: number;
-  journeyStage: "Intake" | "Assessment" | "Treatment" | "Monitoring" | "Recovery";
+  journeyStage: JourneyStage;
   vitals: Array<{ label: string; value: string; note: string }>;
   history: string[];
 };
@@ -369,6 +371,13 @@ export function riskRank(risk: Risk): number {
 
 export function getPatientById(patientId: string): Patient {
   return patients.find((patient) => patient.id === patientId) ?? patients[0];
+}
+
+export function getPatientsByIds(patientIds: string[]): Patient[] {
+  const order = new Map(patientIds.map((patientId, index) => [patientId, index]));
+  return patients
+    .filter((patient) => order.has(patient.id))
+    .sort((left, right) => (order.get(left.id) ?? 0) - (order.get(right.id) ?? 0));
 }
 
 export function patientsForNurse(name: string): Patient[] {

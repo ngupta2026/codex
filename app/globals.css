@@ -1209,7 +1209,8 @@
   font-size: 0.72rem;
 }
 
-.ay-sidebar-auth-links button {
+.ay-sidebar-auth-links button,
+.ay-sidebar-auth-links a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1348,6 +1349,14 @@
 .ay-sidebar-auth-links.footer {
   justify-content: center;
   font-size: 0.74rem;
+}
+
+.ay-inline-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .ay-sidebar-account-card {
@@ -3339,6 +3348,23 @@
   padding: 0.55rem 0.75rem;
   font-size: 0.78rem;
   font-weight: 850;
+}
+
+:is(
+  .ay-sidebar-primary-button,
+  .ay-sidebar-socials button,
+  .ay-sidebar-auth-links button,
+  .ay-sidebar-auth-links a,
+  .ay-chat-suggestions button,
+  .ay-chat-form button,
+  .ay-secondary-button,
+  .ay-ghost-button,
+  .ay-primary-button
+):disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  box-shadow: none;
+  transform: none;
 }
 
 .ay-chat-form {

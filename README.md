@@ -6,8 +6,7 @@ ArogyaYatra is an AI-enabled healthcare coordinator for post-discharge virtual c
 
 The current public deployment is live on Vercel:
 
-- Public URL: `https://carejourney.vercel.app`
-- Project alias: `https://arogyayatra-next-app.vercel.app`
+- Public URL: `https://arogyayatra-next-app.vercel.app`
 - Deployment URL: `https://arogyayatra-next-jkjxg2fiw-ngupta49-9905s-projects.vercel.app`
 
 The Vercel CLI linked this repo to the Vercel project `arogyayatra-next-app`. The local `.vercel` directory stays ignored through `.gitignore`.
@@ -112,6 +111,53 @@ Build validation:
 cd E:\Courses\Handshake\Codex\VCC\arogyayatra-next-app
 npm run build
 ```
+
+## Automated testing
+
+This repo now includes:
+
+- `Vitest` for runtime and contract unit tests
+- `Playwright` for route and API smoke tests
+
+One-time browser install for e2e:
+
+```powershell
+cd E:\Courses\Handshake\Codex\VCC\arogyayatra-next-app
+npm run test:e2e:install
+```
+
+Run unit tests:
+
+```powershell
+cd E:\Courses\Handshake\Codex\VCC\arogyayatra-next-app
+npm run test:unit
+```
+
+Run end-to-end smoke tests:
+
+```powershell
+cd E:\Courses\Handshake\Codex\VCC\arogyayatra-next-app
+npm run test:e2e
+```
+
+Run the full automated test path:
+
+```powershell
+cd E:\Courses\Handshake\Codex\VCC\arogyayatra-next-app
+npm test
+```
+
+Current automated coverage includes:
+
+- app foundation role and journey contracts
+- normalizers and policy behavior
+- chat orchestrator response envelope
+- route smoke checks for:
+  - `/`
+  - `/patient/PT-1001`
+  - `/developer`
+  - `/feedback`
+- API smoke check for `/api/chat`
 
 Manual API smoke test example:
 

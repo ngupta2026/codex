@@ -4,12 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import type { AuthenticatedSession } from "@/lib/auth/repository";
 import {
   agentCapabilities,
-  answerCareQuestion,
-  authUsers,
   developers,
   getPatientById,
+  getPatientsByIds,
   nurses,
   patients,
   patientsForNurse,
@@ -45,6 +45,12 @@ const homeActions: Array<{ label: string; href: string; icon: IconName; detail: 
   { label: "Pharmacist dashboard", href: "/pharmacist", icon: "pharmacist", detail: "Track refill blockers, insurance issues, and medication continuity." },
   { label: "AI Enabled Feedback", href: "/feedback", icon: "spark", detail: "Turn page feedback into structured AI improvement prompts for the product team." }
 ];
+
+function getVisibleNavItems(session: AuthenticatedSession | null) {
+  if (!session) return navItems;
+  const allowed = new Set<Role>(["home", session.role, "feedback"]);
+  return navItems.filter((item) => allowed.has(item.id));
+}
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const positiveQuote = "Small steps today build safer recoveries tomorrow.";
@@ -452,28 +458,70 @@ function formatMockLoginTime(value: string): string {
   });
 }
 
-function getSidebarMockUser(role: Role, patient: Patient) {
-  if (role === "patient") {
-    return authUsers.find((user) => user.role === "patient" && user.linkedEntityId === patient.id) ?? null;
-  }
-  if (role === "feedback") {
-    return authUsers.find((user) => user.role === "developer") ?? null;
-  }
-  if (role === "home") return null;
-  return authUsers.find((user) => user.role === role) ?? null;
-}
-
-function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
-  const currentUser = getSidebarMockUser(role, patient);
-  const [email, setEmail] = useState(currentUser?.email ?? "");
+function SidebarAuth({ role, initialSession }: { role: Role; initialSession: AuthenticatedSession | null }) {
+  const [session, setSession] = useState<AuthenticatedSession | null>(initialSession);
+  const [identifier, setIdentifier] = useState(initialSession?.email ?? "");
   const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setEmail(currentUser?.email ?? "");
+    setSession(initialSession);
+    setIdentifier(initialSession?.email ?? "");
     setPassword("");
-  }, [currentUser?.email]);
+    setError(null);
+  }, [initialSession]);
 
-  if (role !== "home" && currentUser) {
+  async function handleLogin() {
+    setPending(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier, password })
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: string; redirectTo?: string; session?: AuthenticatedSession }
+        | null;
+
+      if (!response.ok || !payload?.session || !payload.redirectTo) {
+        setError(payload?.error ?? "Unable to sign in.");
+        return;
+      }
+
+      setSession(payload.session);
+      setPassword("");
+
+      const redirectOverride = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirectTo") : null;
+      window.location.assign(redirectOverride || payload.redirectTo);
+    } catch {
+      setError("Unable to sign in right now.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleLogout() {
+    setPending(true);
+    setError(null);
+
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      setSession(null);
+      setIdentifier("");
+      setPassword("");
+      window.location.assign("/");
+    } catch {
+      setError("Unable to sign out right now.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (session) {
+    const accountPath = session.role === "patient" ? `/patient/${session.linkedEntityId ?? ""}` : `/${session.role}`;
     return (
       <section className="ay-sidebar-auth-card ay-sidebar-account-card">
         <div className="ay-sidebar-auth-head">
@@ -482,15 +530,15 @@ function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
           </span>
           <div>
             <strong>Signed in</strong>
-            <span>Mock account preview</span>
+            <span>Authenticated role session</span>
           </div>
         </div>
         <div className="ay-sidebar-account-summary">
-          <strong>{currentUser.name}</strong>
-          <span>{currentUser.email}</span>
+          <strong>{session.displayName}</strong>
+          <span>{session.email}</span>
           <div className="ay-sidebar-account-meta">
-            <em>{currentUser.role}</em>
-            <em>{currentUser.authStatus}</em>
+            <em>{session.role}</em>
+            <em>{session.scope.kind.replaceAll("_", " ")}</em>
           </div>
         </div>
         <div className="ay-sidebar-trust-box compact">
@@ -499,13 +547,18 @@ function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
           </span>
           <div>
             <strong>Role-scoped access</strong>
-            <span>{currentUser.scopeSummary}</span>
+            <span>{session.scope.summary}</span>
           </div>
         </div>
         <div className="ay-sidebar-session-row">
           <span>Last login</span>
-          <strong>{formatMockLoginTime(currentUser.lastLoginAt)}</strong>
+          <strong>{formatMockLoginTime(session.lastLoginAt ?? session.issuedAt)}</strong>
         </div>
+        <div className="ay-sidebar-auth-links footer">
+          <Link href={accountPath}>Open my dashboard</Link>
+          <button type="button" onClick={handleLogout} disabled={pending}>Sign out</button>
+        </div>
+        {error ? <p className="ay-inline-error">{error}</p> : null}
       </section>
     );
   }
@@ -522,7 +575,7 @@ function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
       </div>
       <label className="ay-sidebar-field">
         <span>Email address</span>
-        <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
+        <input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="you@example.com" />
       </label>
       <label className="ay-sidebar-field">
         <span>Password</span>
@@ -530,9 +583,11 @@ function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
       </label>
       <div className="ay-sidebar-auth-links">
         <button type="button">Forgot password?</button>
-        <span>UI preview only</span>
+        <span>Secure role-based access</span>
       </div>
-      <button className="ay-sidebar-primary-button" type="button">Sign in</button>
+      <button className="ay-sidebar-primary-button" type="button" onClick={handleLogin} disabled={pending || !identifier.trim() || !password.trim()}>
+        {pending ? "Signing in..." : "Sign in"}
+      </button>
       <div className="ay-sidebar-divider"><span>or continue with</span></div>
       <div className="ay-sidebar-socials">
         <button type="button"><span className="ay-social-mark google">G</span> Sign in with Google</button>
@@ -543,6 +598,7 @@ function SidebarMockAuth({ role, patient }: { role: Role; patient: Patient }) {
         <span>New to ArogyaYatra?</span>
         <button type="button">Request access</button>
       </div>
+      {error ? <p className="ay-inline-error">{error}</p> : null}
     </section>
   );
 }
@@ -969,7 +1025,7 @@ function DeveloperConsoleView() {
   );
 }
 
-function Assistant({ role, patient }: { role: Role; patient: Patient }) {
+function Assistant({ role, patient, session }: { role: Role; patient: Patient; session: AuthenticatedSession | null }) {
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState("Ask for page-specific guidance, medication history, workload, or refill blockers.");
   const [loading, setLoading] = useState(false);
@@ -987,18 +1043,41 @@ function Assistant({ role, patient }: { role: Role; patient: Patient }) {
               : role === "feedback"
                 ? "AI feedback assistant"
               : "Developer assistant";
+  const assistantEnabled = Boolean(session) && role !== "home" && role !== "feedback" && role !== "developer";
+
+  useEffect(() => {
+    if (assistantEnabled) {
+      setAnswer("Ask for page-specific guidance, medication history, workload, or refill blockers.");
+      return;
+    }
+
+    if (role === "developer") {
+      setAnswer("Developer access uses the observability console, traces, guardrails, and review tooling instead of the patient-care chat endpoint.");
+      return;
+    }
+
+    if (role === "feedback") {
+      setAnswer("Use AI Enabled Feedback to capture workflow issues and generate structured improvement prompts.");
+      return;
+    }
+
+    setAnswer("Sign in and open an authorized care dashboard to use the care assistant.");
+  }, [assistantEnabled, role]);
 
   async function respond(text: string) {
     const cleaned = text.trim();
-    if (!cleaned) return;
+    if (!cleaned || !assistantEnabled) return;
     setLoading(true);
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, patientId: patient.id, question: cleaned })
+        body: JSON.stringify({ patientId: patient.id, question: cleaned })
       });
-      if (!response.ok) throw new Error("Chat route failed");
+      if (!response.ok) {
+        const failure = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(failure?.error ?? "Chat route failed");
+      }
       const payload = (await response.json()) as {
         answer: string;
         agentsUsed?: string[];
@@ -1013,9 +1092,8 @@ function Assistant({ role, patient }: { role: Role; patient: Patient }) {
         .filter(Boolean)
         .join(" ");
       setAnswer(`${payload.answer}${details ? ` ${details}` : ""}`);
-    } catch {
-      const fallback = answerCareQuestion(role, patient.id, cleaned);
-      setAnswer(`${fallback.answer} Agents used: ${fallback.agentsUsed.join(", ")}.`);
+    } catch (error) {
+      setAnswer(error instanceof Error ? error.message : "Unable to reach the assistant right now.");
     } finally {
       setLoading(false);
     }
@@ -1025,12 +1103,12 @@ function Assistant({ role, patient }: { role: Role; patient: Patient }) {
     <aside className="ay-chat">
       <div className="ay-chat-head">
         <strong>{title}</strong>
-        <span>Page-specific coded assistant</span>
+        <span>{assistantEnabled ? "Session-scoped assistant" : "Protected helper panel"}</span>
       </div>
       <div className="ay-chat-answer">{answer}</div>
       <div className="ay-chat-suggestions">
         {["What should I review first?", "Show medication history", "Explain current blockers"].map((item) => (
-          <button key={item} type="button" onClick={() => void respond(item)}>
+          <button key={item} type="button" onClick={() => void respond(item)} disabled={!assistantEnabled}>
             {item}
           </button>
         ))}
@@ -1042,8 +1120,8 @@ function Assistant({ role, patient }: { role: Role; patient: Patient }) {
           void respond(query);
         }}
       >
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ask about this page" />
-        <button type="submit">{loading ? "..." : "Ask"}</button>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={assistantEnabled ? "Ask about this page" : "Sign in to enable assistant access"} disabled={!assistantEnabled} />
+        <button type="submit" disabled={!assistantEnabled}>{loading ? "..." : "Ask"}</button>
       </form>
     </aside>
   );
@@ -1374,8 +1452,8 @@ function PatientView({ patient }: { patient: Patient }) {
   );
 }
 
-function NurseView() {
-  const queue = priorityPatients().slice(0, 6);
+function NurseView({ queuePatients }: { queuePatients?: Patient[] }) {
+  const queue = (queuePatients?.length ? queuePatients : priorityPatients()).slice(0, 6);
   const focusedPatient = queue[0];
   const nurseStages: JourneyStep[] = [
     { name: "Intake", status: "Completed", detail: "Completed", meta: "12 Apr, 10:32 AM", icon: "calendar" },
@@ -1487,8 +1565,10 @@ function NurseView() {
   );
 }
 
-function PharmacistView() {
-  const queue = patients.filter((patient) => patient.refillStatus !== "On hand" || patient.risk !== "Routine");
+function PharmacistView({ queuePatients }: { queuePatients?: Patient[] }) {
+  const queue = queuePatients?.length
+    ? queuePatients
+    : patients.filter((patient) => patient.refillStatus !== "On hand" || patient.risk !== "Routine");
   const focusedPatient = queue[0] ?? patients[0];
   const pharmacistStages: JourneyStep[] = [
     { name: "Intake", status: "Completed", detail: "Completed", meta: "12 Apr, 10:32 AM", icon: "calendar" },
@@ -1740,20 +1820,29 @@ function HomeView() {
 export function ArogyaYatraDashboard({
   initialRole = "home",
   patientId = "PT-1001",
+  initialSession = null,
+  nursePatientIds,
+  pharmacistPatientIds,
   developerSourceRole,
   developerPatientId
 }: {
   initialRole?: Role;
   patientId?: string;
+  initialSession?: AuthenticatedSession | null;
+  nursePatientIds?: string[];
+  pharmacistPatientIds?: string[];
   developerSourceRole?: Role;
   developerPatientId?: string;
 }) {
   const [selection, setSelection] = useState<EntitySelection>(null);
   const [smartClicks, setSmartClicks] = useState(false);
   const patient = useMemo(() => getPatientById(patientId), [patientId]);
+  const nurseQueue = useMemo(() => getPatientsByIds(nursePatientIds ?? []), [nursePatientIds]);
+  const pharmacistQueue = useMemo(() => getPatientsByIds(pharmacistPatientIds ?? []), [pharmacistPatientIds]);
   const role = initialRole;
   const feedbackSourceRole = role === "feedback" ? "home" : role;
   const feedbackHref = `/feedback?sourceRole=${feedbackSourceRole}&patientId=${patient.id}`;
+  const visibleNavItems = useMemo(() => getVisibleNavItems(initialSession), [initialSession]);
 
   return (
     <div className={`ay-shell${smartClicks ? " ay-smart-clicks-active" : ""}`}>
@@ -1784,9 +1873,9 @@ export function ArogyaYatraDashboard({
             <span>Your access is protected through role-aware workflows and safe review.</span>
           </div>
         </div>
-        <SidebarMockAuth role={role} patient={patient} />
+        <SidebarAuth role={role} initialSession={initialSession} />
         <nav>
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link key={item.id} href={item.href} className={role === item.id ? "active" : ""}>
               <span className="ay-nav-icon">
                 <MedicalIcon name={item.icon} />
@@ -1812,12 +1901,12 @@ export function ArogyaYatraDashboard({
         {role === "home" ? <HomeView /> : null}
         {role === "admin" ? <AdminView onSelect={setSelection} /> : null}
         {role === "patient" ? <PatientView patient={patient} /> : null}
-        {role === "nurse" ? <NurseView /> : null}
-        {role === "pharmacist" ? <PharmacistView /> : null}
+        {role === "nurse" ? <NurseView queuePatients={nurseQueue} /> : null}
+        {role === "pharmacist" ? <PharmacistView queuePatients={pharmacistQueue} /> : null}
         {role === "developer" ? <DeveloperConsoleView /> : null}
         {role === "feedback" ? <DeveloperView currentRole={role} currentPatient={patient} sourceRoleFromQuery={developerSourceRole} patientIdFromQuery={developerPatientId} /> : null}
       </main>
-      <Assistant role={role} patient={patient} />
+      <Assistant role={role} patient={patient} session={initialSession} />
       <EntityModal selection={selection} onClose={() => setSelection(null)} />
     </div>
   );

@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PATIENT
+  NURSE
+  PHARMACIST
+  DEVELOPER
+}
+
+enum AuthStatus {
+  ACTIVE
+  INVITED
+}
+
+enum JourneyStage {
+  INTAKE
+  ASSESSMENT
+  TREATMENT
+  MONITORING
+  RECOVERY
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  MISSED
+  CANCELLED
+}
+
+enum TraceStatus {
+  COMPLETED
+  BLOCKED
+  FAILED
+}
+
+enum FeedbackUserType {
+  CUSTOMER
+  PATIENT
+  NURSE
+  PHARMACIST
+  ADMIN
+  CAREGIVER
+  DEVELOPER
+}
+
+model User {
+  id             String      @id @db.VarChar(64)
+  email          String      @unique
+  username       String      @unique
+  phone          String?
+  displayName    String
+  role           UserRole
+  authStatus     AuthStatus  @default(ACTIVE)
+  passwordHash   String
+  linkedEntityId String?
+  scopeSummary   String?
+  lastLoginAt    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  patientProfile     Patient?     @relation("UserPatient")
+  nurseProfile       Nurse?       @relation("UserNurse")
+  pharmacistProfile  Pharmacist?  @relation("UserPharmacist")
+  adminProfile       Admin?       @relation("UserAdmin")
+  developerProfile   Developer?   @relation("UserDeveloper")
+  traces             Trace[]
+  feedbackSubmissions Feedback[]
+  auditLogs          AuditLog[]
+}
+
+model Patient {
+  id                  String         @id @db.VarChar(64)
+  userId              String?        @unique
+  name                String
+  diagnosis           String
+  riskLabel           String
+  dischargeHoursAgo   Int
+  critical            Boolean        @default(false)
+  currentBarrier      String
+  nextAction          String
+  messageCount        Int            @default(0)
+  currentJourneyStage JourneyStage
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  user         User?              @relation("UserPatient", fields: [userId], references: [id], onDelete: SetNull)
+  assignments  PatientAssignment[]
+  medications  Medication[]
+  vitals       Vital[]
+  appointments Appointment[]
+  journeyEvents JourneyEvent[]
+  traces       Trace[]
+  feedback     Feedback[]
+}
+
+model Nurse {
+  id              String              @id @db.VarChar(64)
+  userId          String?             @unique
+  name            String
+  specialty       String
+  shift           String
+  responseMinutes Int
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user        User?               @relation("UserNurse", fields: [userId], references: [id], onDelete: SetNull)
+  assignments PatientAssignment[] @relation("AssignmentNurse")
+}
+
+model Pharmacist {
+  id         String              @id @db.VarChar(64)
+  userId     String?             @unique
+  name       String
+  focus      String
+  queueSize  Int
+  fillsToday Int
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  user        User?               @relation("UserPharmacist", fields: [userId], references: [id], onDelete: SetNull)
+  assignments PatientAssignment[] @relation("AssignmentPharmacist")
+}
+
+model Admin {
+  id        String   @id @db.VarChar(64)
+  userId    String?  @unique
+  name      String
+  title     String
+  scope     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation("UserAdmin", fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Developer {
+  id        String   @id @db.VarChar(64)
+  userId    String?  @unique
+  name      String
+  title     String
+  focus     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation("UserDeveloper", fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model PatientAssignment {
+  id            String    @id @default(cuid())
+  patientId     String
+  nurseId       String?
+  pharmacistId  String?
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  nurse       Nurse?       @relation("AssignmentNurse", fields: [nurseId], references: [id], onDelete: SetNull)
+  pharmacist  Pharmacist?  @relation("AssignmentPharmacist", fields: [pharmacistId], references: [id], onDelete: SetNull)
+
+  @@index([nurseId, active])
+  @@index([pharmacistId, active])
+  @@index([patientId, active])
+}
+
+model Medication {
+  id           String   @id @default(cuid())
+  patientId    String
+  name         String
+  dose         String?
+  refillStatus String
+  note         String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, active])
+}
+
+model Vital {
+  id         String   @id @default(cuid())
+  patientId  String
+  label      String
+  value      String
+  note       String?
+  recordedAt DateTime @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, recordedAt])
+}
+
+model Appointment {
+  id          String            @id @default(cuid())
+  patientId   String
+  title       String
+  scheduledAt DateTime
+  status      AppointmentStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, scheduledAt])
+}
+
+model JourneyEvent {
+  id         String       @id @default(cuid())
+  patientId  String
+  stage      JourneyStage
+  status     String
+  source     String
+  authority  String
+  rationale  String?
+  createdAt  DateTime     @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, createdAt])
+}
+
+model Trace {
+  id            String       @id @default(cuid())
+  requestKey    String       @unique
+  userId        String?
+  role          UserRole
+  patientId     String?
+  runtimeMode   String
+  question      String?
+  answerSummary String?
+  status        TraceStatus  @default(COMPLETED)
+  createdAt     DateTime     @default(now())
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  patient      Patient?      @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  toolCalls    ToolCall[]
+  policyEvents PolicyEvent[]
+
+  @@index([userId, createdAt])
+  @@index([patientId, createdAt])
+}
+
+model ToolCall {
+  id        String   @id @default(cuid())
+  traceId   String
+  toolName  String
+  summary   String
+  createdAt DateTime @default(now())
+
+  trace Trace @relation(fields: [traceId], references: [id], onDelete: Cascade)
+
+  @@index([traceId, createdAt])
+}
+
+model PolicyEvent {
+  id        String   @id @default(cuid())
+  traceId   String
+  trigger   String
+  summary   String
+  createdAt DateTime @default(now())
+
+  trace Trace @relation(fields: [traceId], references: [id], onDelete: Cascade)
+
+  @@index([traceId, createdAt])
+}
+
+model Feedback {
+  id             String           @id @default(cuid())
+  userId         String?
+  sourceRole     String
+  patientId      String?
+  userType       FeedbackUserType
+  aiGoal         String
+  feedback       String
+  desiredOutcome String
+  constraints    String?
+  createdAt      DateTime         @default(now())
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([patientId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  actorRole String
+  eventType String
+  summary   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}

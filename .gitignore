@@ -14,3 +14,9 @@ yarn-error.log*
 pnpm-debug.log*
 
 .vercel
+playwright-report/
+test-results/
+.tmp/
+.env
+.env.local
+.env.production
