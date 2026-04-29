@@ -1,0 +1,7 @@
+.env
+.env.*
+.tmp
+Misc
+lib_share_rupesh.rar
+playwright-report
+test-results
