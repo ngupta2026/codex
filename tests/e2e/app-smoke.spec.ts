@@ -42,6 +42,10 @@ test("developer board requires auth while feedback stays public", async ({ page 
 
   await page.goto("/feedback");
   await expect(page.getByRole("heading", { name: "Capture feedback and shape safer AI features" })).toBeVisible();
+
+  await page.goto("/feedback?sourceRole=home&requestAccess=1&provider=google");
+  await expect(page.getByRole("heading", { name: "Request access to ArogyaYatra" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Prepare access request" })).toBeVisible();
 });
 
 test("chat api requires login and then responds with the agentic envelope", async ({ page }) => {

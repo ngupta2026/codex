@@ -17,6 +17,14 @@ function redirectWithAuthState(request: Request, authState: string) {
   return NextResponse.redirect(new URL(`/?auth=${encodeURIComponent(authState)}`, request.url));
 }
 
+function redirectToRequestAccess(request: Request, provider: string) {
+  const redirectUrl = new URL("/feedback", request.url);
+  redirectUrl.searchParams.set("sourceRole", "home");
+  redirectUrl.searchParams.set("requestAccess", "1");
+  redirectUrl.searchParams.set("provider", provider);
+  return NextResponse.redirect(redirectUrl);
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -55,7 +63,7 @@ export async function GET(request: Request) {
 
     const user = await findAuthUserByIdentifier(identity.email);
     if (!user) {
-      const response = redirectWithAuthState(request, "google_access_denied");
+      const response = redirectToRequestAccess(request, "google");
       response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
       return response;
     }

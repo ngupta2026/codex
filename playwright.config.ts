@@ -13,6 +13,10 @@ export default defineConfig({
   },
   webServer: {
     command: "npm run start:local",
+    env: {
+      ...process.env,
+      DATABASE_URL: ""
+    },
     url: "http://127.0.0.1:3099",
     reuseExistingServer: true,
     timeout: 120000

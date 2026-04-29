@@ -464,6 +464,7 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestAccessHref = "/feedback?sourceRole=home&requestAccess=1";
 
   useEffect(() => {
     setSession(initialSession);
@@ -639,7 +640,7 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
       </div>
       <div className="ay-sidebar-auth-links footer">
         <span>New to ArogyaYatra?</span>
-        <button type="button">Request access</button>
+        <Link href={requestAccessHref}>Request access</Link>
       </div>
       {error ? <p className="ay-inline-error">{error}</p> : null}
     </section>
@@ -740,21 +741,35 @@ function DeveloperView({
   currentRole,
   currentPatient,
   sourceRoleFromQuery,
-  patientIdFromQuery
+  patientIdFromQuery,
+  requestAccessFromQuery,
+  providerFromQuery
 }: {
   currentRole: Role;
   currentPatient: Patient;
   sourceRoleFromQuery?: Role;
   patientIdFromQuery?: string;
+  requestAccessFromQuery?: boolean;
+  providerFromQuery?: string;
 }) {
+  const isRequestAccessMode = Boolean(requestAccessFromQuery);
+  const providerLabel = providerFromQuery?.trim() ? `${providerFromQuery.trim()} sign-in` : "the public sign-in flow";
   const defaultSourceRole =
     sourceRoleFromQuery || (currentRole === "home" || currentRole === "developer" || currentRole === "feedback" ? "home" : currentRole);
   const [sourceRole, setSourceRole] = useState<Role>(defaultSourceRole);
   const [patientId, setPatientId] = useState(patientIdFromQuery || currentPatient.id);
   const [userType, setUserType] = useState("customer");
   const [aiGoal, setAiGoal] = useState("care coordination");
-  const [feedback, setFeedback] = useState("");
-  const [desiredOutcome, setDesiredOutcome] = useState("");
+  const [feedback, setFeedback] = useState(() =>
+    isRequestAccessMode
+      ? "I tried to sign in, but my account is not yet provisioned for ArogyaYatra."
+      : ""
+  );
+  const [desiredOutcome, setDesiredOutcome] = useState(() =>
+    isRequestAccessMode
+      ? "Route this access request to the product team and provision the correct role-based access for this user."
+      : ""
+  );
   const [constraints, setConstraints] = useState("Keep the feature calm, explainable, and safe for healthcare coordination.");
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [contextSummary, setContextSummary] = useState("");
@@ -806,14 +821,23 @@ function DeveloperView({
     <div className="ay-board">
       <div className="ay-topbar">
         <div>
-          <span className="ay-pill">AI Enabled Feedback</span>
-          <h2>Capture feedback and shape safer AI features</h2>
-          <p>Capture feedback from any page, choose the end-user persona, and generate a ChatGPT-ready prompt for tailored AI features.</p>
+          <span className="ay-pill">{isRequestAccessMode ? "Request Access" : "AI Enabled Feedback"}</span>
+          <h2>{isRequestAccessMode ? "Request access to ArogyaYatra" : "Capture feedback and shape safer AI features"}</h2>
+          <p>
+            {isRequestAccessMode
+              ? `We couldn't match your ${providerLabel} to a provisioned ArogyaYatra account. Use this intake to capture the access request and the role the user should receive.`
+              : "Capture feedback from any page, choose the end-user persona, and generate a ChatGPT-ready prompt for tailored AI features."}
+          </p>
         </div>
       </div>
       <div className="ay-grid-2">
         <Card title="Feedback intake">
           <div className="ay-form-grid">
+            {isRequestAccessMode ? (
+              <div className="ay-form-feedback info" role="status">
+                Unknown Google users are routed here so the team can review access needs before provisioning a role.
+              </div>
+            ) : null}
             <label className="ay-field">
               <span>Source page</span>
               <select value={sourceRole} onChange={(event) => setSourceRole(event.target.value as Role)}>
@@ -839,7 +863,7 @@ function DeveloperView({
               </select>
             </label>
             <label className="ay-field full">
-              <span>Feedback from the current page</span>
+              <span>{isRequestAccessMode ? "Access request details" : "Feedback from the current page"}</span>
               <textarea
                 value={feedback}
                 onChange={(event) => {
@@ -851,7 +875,7 @@ function DeveloperView({
               />
             </label>
             <label className="ay-field full">
-              <span>Desired outcome</span>
+              <span>{isRequestAccessMode ? "Desired access outcome" : "Desired outcome"}</span>
               <textarea
                 value={desiredOutcome}
                 onChange={(event) => {
@@ -867,7 +891,9 @@ function DeveloperView({
               <textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} rows={3} />
             </label>
             <div className="ay-form-actions">
-              <button className="ay-primary-button" type="button" onClick={() => void generatePrompt()}>{loading ? "Generating..." : "Generate ChatGPT prompt"}</button>
+              <button className="ay-primary-button" type="button" onClick={() => void generatePrompt()}>
+                {loading ? "Generating..." : isRequestAccessMode ? "Prepare access request" : "Generate ChatGPT prompt"}
+              </button>
             </div>
             {errorMessage ? <p className="ay-form-feedback" role="alert">{errorMessage}</p> : null}
           </div>
@@ -891,9 +917,18 @@ function DeveloperView({
           </div>
         </Card>
       </div>
-      <Card title="Generated prompt" action={contextSummary ? <span className="ay-badge info">{contextSummary}</span> : null}>
+      <Card title={isRequestAccessMode ? "Generated access request" : "Generated prompt"} action={contextSummary ? <span className="ay-badge info">{contextSummary}</span> : null}>
         <div className="ay-prompt-preview">
-          <textarea value={generatedPrompt} readOnly placeholder="Generate a prompt to create a ChatGPT-ready AI feature brief from this page feedback." rows={18} />
+          <textarea
+            value={generatedPrompt}
+            readOnly
+            placeholder={
+              isRequestAccessMode
+                ? "Prepare a structured access request summary for the product team."
+                : "Generate a prompt to create a ChatGPT-ready AI feature brief from this page feedback."
+            }
+            rows={18}
+          />
         </div>
       </Card>
     </div>
@@ -1867,7 +1902,9 @@ export function ArogyaYatraDashboard({
   nursePatientIds,
   pharmacistPatientIds,
   developerSourceRole,
-  developerPatientId
+  developerPatientId,
+  feedbackRequestAccess = false,
+  feedbackProvider
 }: {
   initialRole?: Role;
   patientId?: string;
@@ -1876,6 +1913,8 @@ export function ArogyaYatraDashboard({
   pharmacistPatientIds?: string[];
   developerSourceRole?: Role;
   developerPatientId?: string;
+  feedbackRequestAccess?: boolean;
+  feedbackProvider?: string;
 }) {
   const [selection, setSelection] = useState<EntitySelection>(null);
   const [smartClicks, setSmartClicks] = useState(false);
@@ -1947,7 +1986,16 @@ export function ArogyaYatraDashboard({
         {role === "nurse" ? <NurseView queuePatients={nurseQueue} /> : null}
         {role === "pharmacist" ? <PharmacistView queuePatients={pharmacistQueue} /> : null}
         {role === "developer" ? <DeveloperConsoleView /> : null}
-        {role === "feedback" ? <DeveloperView currentRole={role} currentPatient={patient} sourceRoleFromQuery={developerSourceRole} patientIdFromQuery={developerPatientId} /> : null}
+        {role === "feedback" ? (
+          <DeveloperView
+            currentRole={role}
+            currentPatient={patient}
+            sourceRoleFromQuery={developerSourceRole}
+            patientIdFromQuery={developerPatientId}
+            requestAccessFromQuery={feedbackRequestAccess}
+            providerFromQuery={feedbackProvider}
+          />
+        ) : null}
       </main>
       <Assistant role={role} patient={patient} session={initialSession} />
       <EntityModal selection={selection} onClose={() => setSelection(null)} />
