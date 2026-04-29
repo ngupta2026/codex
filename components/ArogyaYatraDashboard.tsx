@@ -472,6 +472,33 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
     setError(null);
   }, [initialSession]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || initialSession) return;
+
+    const authState = new URLSearchParams(window.location.search).get("auth");
+    if (!authState) return;
+
+    if (authState === "required") {
+      setError("Sign in required to continue.");
+      return;
+    }
+    if (authState === "google_unavailable") {
+      setError("Google sign-in is not configured for this environment.");
+      return;
+    }
+    if (authState === "google_denied") {
+      setError("Google sign-in was cancelled.");
+      return;
+    }
+    if (authState === "google_access_denied") {
+      setError("This Google account is not provisioned for ArogyaYatra.");
+      return;
+    }
+    if (authState === "google_failed") {
+      setError("Unable to complete Google sign-in.");
+    }
+  }, [initialSession]);
+
   async function handleLogin() {
     setPending(true);
     setError(null);
@@ -518,6 +545,19 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
     } finally {
       setPending(false);
     }
+  }
+
+  function handleGoogleLogin() {
+    setPending(true);
+    setError(null);
+
+    const redirectOverride = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("redirectTo") : null;
+    const search = new URLSearchParams();
+    if (redirectOverride?.trim()) {
+      search.set("redirectTo", redirectOverride);
+    }
+    const href = `/api/auth/google/start${search.toString() ? `?${search.toString()}` : ""}`;
+    window.location.assign(href);
   }
 
   if (session) {
@@ -571,8 +611,13 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
         </span>
         <div>
           <strong>Sign in to continue</strong>
+          <span>Google sign-in comes first, with role-based demo access available below.</span>
         </div>
       </div>
+      <button className="ay-social-button ay-social-primary" type="button" onClick={handleGoogleLogin} disabled={pending}>
+        <span className="ay-social-mark google">G</span> Sign in with Google
+      </button>
+      <div className="ay-sidebar-divider"><span>or use role-based sign-in</span></div>
       <label className="ay-sidebar-field">
         <span>Email address</span>
         <input value={identifier} onChange={(event) => setIdentifier(event.target.value)} placeholder="you@example.com" />
@@ -588,11 +633,9 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
       <button className="ay-sidebar-primary-button" type="button" onClick={handleLogin} disabled={pending || !identifier.trim() || !password.trim()}>
         {pending ? "Signing in..." : "Sign in"}
       </button>
-      <div className="ay-sidebar-divider"><span>or continue with</span></div>
       <div className="ay-sidebar-socials">
-        <button type="button"><span className="ay-social-mark google">G</span> Sign in with Google</button>
-        <button type="button"><span className="ay-social-mark microsoft">M</span> Sign in with Microsoft</button>
-        <button type="button"><span className="ay-social-mark sso"><MedicalIcon name="shield" /></span> Sign in with SSO</button>
+        <button type="button" disabled><span className="ay-social-mark microsoft">M</span> Sign in with Microsoft</button>
+        <button type="button" disabled><span className="ay-social-mark sso"><MedicalIcon name="shield" /></span> Sign in with SSO</button>
       </div>
       <div className="ay-sidebar-auth-links footer">
         <span>New to ArogyaYatra?</span>

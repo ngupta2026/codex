@@ -40,6 +40,63 @@ Still pending for later phases:
 4. Real LLM tool-calling behind the same coordinator contract.
 5. Durable audit storage for feedback and chat runs.
 
+## Phase 1 Acceptance Criteria
+
+Phase 1 is considered complete when all of the following are true:
+
+1. The shared app role model is stable and consistently used across the app:
+   - `home`
+   - `admin`
+   - `patient`
+   - `nurse`
+   - `pharmacist`
+   - `developer`
+   - `feedback`
+2. The care journey model is centralized and reused across boards:
+   - `Intake`
+   - `Assessment`
+   - `Treatment`
+   - `Monitoring`
+   - `Recovery`
+3. Shared foundation contracts exist for:
+   - session and access scope
+   - patient context
+   - journey state
+   - agent runtime request and response envelopes
+   - trace events
+   - audit events
+   - architecture decision boundaries
+4. The architecture explicitly separates:
+   - deterministic policy
+   - agent recommendation
+   - UI display state
+5. The `/api/chat` path returns the Phase 1 runtime envelope, including:
+   - `mode = agentic_coordinator_v1`
+   - `decisionBoundaries`
+   - `journeyModel`
+   - `traceEvents`
+6. Home, Patient, Nurse, and Pharmacist views all use the same care-journey language and stage model.
+7. Developer and AI Enabled Feedback remain separate boards and are not merged into a single workflow surface.
+8. The app builds successfully with:
+
+```powershell
+npm run build
+```
+
+9. The foundation contract and runtime smoke tests pass with:
+
+```powershell
+npm run test:unit
+npm run test:e2e
+```
+
+Manual validation for Phase 1:
+
+1. Open the home page and confirm the sidebar and workspace routing expose the expected role structure.
+2. Open the Patient, Nurse, and Pharmacist boards and confirm the journey stages match the same five-stage model.
+3. Trigger the chat path and confirm the structured agentic envelope is returned instead of a plain text-only response.
+4. Toggle `SMART CLICKS` and confirm interactive elements can be visually separated from passive content.
+
 ## Important files
 
 - `app/api/chat/route.ts`

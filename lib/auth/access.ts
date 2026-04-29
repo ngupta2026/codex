@@ -44,3 +44,15 @@ export function buildAuthRedirect(request: NextRequest): URL {
   redirectUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
   return redirectUrl;
 }
+
+export function safeInternalRedirectPath(value?: string | null): string | null {
+  if (!value || typeof value !== "string") return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+
+  try {
+    const parsed = new URL(value, "https://arogyayatra.local");
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}

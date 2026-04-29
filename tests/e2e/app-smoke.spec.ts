@@ -14,6 +14,7 @@ test("home page loads and shows workspace routing", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("Available Workspaces")).toBeVisible();
   await expect(page.getByText("Choose a role")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Sign in with Google/i })).toBeVisible();
   await expect(page.getByRole("link", { name: /Admin dashboard/i })).toBeVisible();
 });
 

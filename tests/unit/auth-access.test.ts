@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { safeInternalRedirectPath } from "@/lib/auth/access";
 import { canAccessPatient, resolvePatientIdForSession, roleHomePath, type AuthenticatedSession } from "@/lib/auth/repository";
 
 function makeSession(overrides: Partial<AuthenticatedSession>): AuthenticatedSession {
@@ -49,5 +50,12 @@ describe("phase 2 authorization helpers", () => {
     expect(canAccessPatient(session, "PT-1002")).toBe(false);
     expect(resolvePatientIdForSession(session, "PT-1002")).toBe("PT-1001");
     expect(roleHomePath(session)).toBe("/nurse");
+  });
+
+  it("only allows safe internal redirect paths", () => {
+    expect(safeInternalRedirectPath("/admin")).toBe("/admin");
+    expect(safeInternalRedirectPath("/patient/PT-1001?tab=history")).toBe("/patient/PT-1001?tab=history");
+    expect(safeInternalRedirectPath("https://example.com")).toBeNull();
+    expect(safeInternalRedirectPath("//evil.example.com")).toBeNull();
   });
 });
