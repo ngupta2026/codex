@@ -12,7 +12,7 @@ export type AuthUserRecord = {
   phone: string;
   displayName: string;
   linkedEntityId?: string;
-  authStatus: "active" | "invited";
+  authStatus: "active" | "invited" | "pending_approval";
   lastLoginAt?: string;
   scopeSummary?: string;
   passwordHash: string;
@@ -57,8 +57,10 @@ function userRoleFromPrisma(role: UserRole): AuthenticatedAppRole {
   return "pharmacist";
 }
 
-function authStatusFromPrisma(status: AuthStatus): "active" | "invited" {
-  return status === AuthStatus.INVITED ? "invited" : "active";
+function authStatusFromPrisma(status: AuthStatus): "active" | "invited" | "pending_approval" {
+  if (status === AuthStatus.INVITED) return "invited";
+  if (status === AuthStatus.PENDING_APPROVAL) return "pending_approval";
+  return "active";
 }
 
 function userRoleToPrisma(role: AuthenticatedAppRole): UserRole {
@@ -169,6 +171,13 @@ async function buildDbScope(user: AuthUserRecord): Promise<AccessScopeContract &
   }
 
   if (user.role === "nurse") {
+    if (!user.linkedEntityId) {
+      return {
+        kind: "nurse_assignments",
+        summary: user.scopeSummary ?? `Assigned patient panel for ${user.displayName}`,
+        entityIds: []
+      };
+    }
     const assignments = await prisma.patientAssignment.findMany({
       where: { nurseId: user.linkedEntityId, active: true },
       select: { patientId: true }
@@ -181,6 +190,13 @@ async function buildDbScope(user: AuthUserRecord): Promise<AccessScopeContract &
   }
 
   if (user.role === "pharmacist") {
+    if (!user.linkedEntityId) {
+      return {
+        kind: "pharmacy_queue",
+        summary: user.scopeSummary ?? `Medication queue and linked patients for ${user.displayName}`,
+        entityIds: []
+      };
+    }
     const assignments = await prisma.patientAssignment.findMany({
       where: { pharmacistId: user.linkedEntityId, active: true },
       select: { patientId: true }

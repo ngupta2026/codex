@@ -2656,6 +2656,34 @@
   height: auto;
 }
 
+.ay-login-gate-card {
+  padding: 1.4rem 1.5rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 249, 249, 0.92));
+  border: 1px solid rgba(12, 114, 123, 0.18);
+}
+
+.ay-login-gate-copy {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  text-align: center;
+}
+
+.ay-login-gate-copy strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--color-text);
+}
+
+.ay-login-gate-copy span:last-child {
+  max-width: 48rem;
+  color: var(--color-text-muted);
+  font-size: 0.96rem;
+  line-height: 1.6;
+}
+
 .ay-home-action-ribbon-card {
   padding: 0.95rem 1rem;
   background: linear-gradient(90deg, rgba(227, 245, 247, 0.84), rgba(255, 255, 255, 0.88), rgba(235, 248, 249, 0.84));
@@ -3013,6 +3041,129 @@
   color: var(--color-error);
   font-size: 0.86rem;
   line-height: 1.45;
+}
+
+.ay-form-feedback.info {
+  color: var(--color-primary);
+}
+
+.ay-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ay-count-button {
+  gap: 0.7rem;
+}
+
+.ay-count-button em {
+  min-width: 1.6rem;
+  height: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(12, 114, 123, 0.14);
+  color: var(--color-primary);
+  font-style: normal;
+  font-weight: 900;
+  font-size: 0.78rem;
+}
+
+.ay-pending-approvals-card {
+  margin-top: 1rem;
+}
+
+.ay-pending-approvals {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.ay-pending-approval-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.32fr);
+  gap: 1rem;
+  align-items: start;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(12, 114, 123, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(243, 250, 250, 0.92));
+}
+
+.ay-pending-approval-copy {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.ay-pending-approval-copy strong {
+  font-size: 1rem;
+}
+
+.ay-pending-approval-copy span,
+.ay-pending-approval-copy p,
+.ay-pending-approval-copy small {
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.ay-pending-approval-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ay-pending-approval-detail {
+  margin-top: 0.55rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(12, 114, 123, 0.12);
+}
+
+.ay-pending-approval-button-row {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.ay-empty-state {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 0.2rem;
+}
+
+.ay-empty-state span {
+  color: var(--color-text-muted);
+}
+
+.ay-onboarding-card {
+  min-height: 100%;
+}
+
+.ay-onboarding-grid .ay-field input,
+.ay-onboarding-grid .ay-field textarea,
+.ay-onboarding-grid .ay-field select {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: rgba(247, 251, 250, 0.92);
+  color: var(--color-text);
+  padding: 0.78rem 0.88rem;
+  font: inherit;
+}
+
+.ay-onboarding-grid .ay-field input[readonly] {
+  background: rgba(239, 247, 247, 0.86);
+  color: var(--color-text-muted);
+}
+
+.ay-onboarding-status {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.ay-onboarding-status strong {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  letter-spacing: -0.04em;
 }
 
 .ay-dev-board {
@@ -3699,6 +3850,29 @@
   }
 
   .ay-topbar {
+    display: grid;
+  }
+
+  .ay-topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .ay-count-button {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .ay-pending-approval-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ay-pending-approval-actions,
+  .ay-pending-approval-button-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ay-pending-approval-button-row {
     display: grid;
   }
 

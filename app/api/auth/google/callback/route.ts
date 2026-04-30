@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { createPendingGooglePatientAccess, ensurePendingAccessForUser } from "@/lib/auth/pending-access";
 import { buildSessionForUser, findAuthUserByIdentifier, recordAuditEvent, roleHomePath, updateLastLogin } from "@/lib/auth/repository";
 import {
   decodeGoogleOAuthStateCookie,
@@ -9,7 +10,7 @@ import {
   verifyGoogleIdToken
 } from "@/lib/auth/google";
 import { createSessionToken } from "@/lib/auth/session";
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
+import { createPendingAccessToken, PENDING_ACCESS_COOKIE_NAME, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth/token";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,25 @@ function redirectToRequestAccess(request: Request, provider: string) {
   redirectUrl.searchParams.set("requestAccess", "1");
   redirectUrl.searchParams.set("provider", provider);
   return NextResponse.redirect(redirectUrl);
+}
+
+async function redirectToPendingOnboarding(request: Request, input: {
+  requestId: string;
+  userId: string;
+  email: string;
+  displayName: string;
+}) {
+  const response = NextResponse.redirect(new URL("/", request.url));
+  const token = await createPendingAccessToken(input);
+  response.cookies.set(PENDING_ACCESS_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7
+  });
+  response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
+  return response;
 }
 
 export async function GET(request: Request) {
@@ -63,9 +83,52 @@ export async function GET(request: Request) {
 
     const user = await findAuthUserByIdentifier(identity.email);
     if (!user) {
-      const response = redirectToRequestAccess(request, "google");
-      response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
-      return response;
+      const pendingAccess = await createPendingGooglePatientAccess({
+        email: identity.email,
+        displayName: identity.name || identity.email.split("@")[0] || "New patient",
+        googleSubject: identity.subject
+      });
+
+      if (!pendingAccess) {
+        const response = redirectToRequestAccess(request, "google");
+        response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
+        return response;
+      }
+
+      return redirectToPendingOnboarding(request, {
+        requestId: pendingAccess.id,
+        userId: pendingAccess.userId,
+        email: pendingAccess.email,
+        displayName: pendingAccess.displayName
+      });
+    }
+
+    if (user.authStatus === "pending_approval") {
+      const pendingAccess = await ensurePendingAccessForUser(
+        {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: user.role
+        },
+        {
+          googleSubject: identity.subject,
+          provider: "google"
+        }
+      );
+
+      if (!pendingAccess) {
+        const response = redirectToRequestAccess(request, "google");
+        response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
+        return response;
+      }
+
+      return redirectToPendingOnboarding(request, {
+        requestId: pendingAccess.id,
+        userId: pendingAccess.userId,
+        email: pendingAccess.email,
+        displayName: pendingAccess.displayName
+      });
     }
 
     const token = await createSessionToken(user);
@@ -97,6 +160,13 @@ export async function GET(request: Request) {
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 12
+    });
+    response.cookies.set(PENDING_ACCESS_COOKIE_NAME, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      expires: new Date(0)
     });
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
     return response;

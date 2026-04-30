@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import type { PendingAccessRequestContract } from "@/lib/app-foundation";
 import type { AuthenticatedSession } from "@/lib/auth/repository";
 import {
   agentCapabilities,
@@ -47,7 +48,7 @@ const homeActions: Array<{ label: string; href: string; icon: IconName; detail: 
 ];
 
 function getVisibleNavItems(session: AuthenticatedSession | null) {
-  if (!session) return navItems;
+  if (!session) return navItems.filter((item) => item.id === "home");
   const allowed = new Set<Role>(["home", session.role, "feedback"]);
   return navItems.filter((item) => allowed.has(item.id));
 }
@@ -458,7 +459,15 @@ function formatMockLoginTime(value: string): string {
   });
 }
 
-function SidebarAuth({ role, initialSession }: { role: Role; initialSession: AuthenticatedSession | null }) {
+function SidebarAuth({
+  role,
+  initialSession,
+  pendingAccess
+}: {
+  role: Role;
+  initialSession: AuthenticatedSession | null;
+  pendingAccess?: PendingAccessRequestContract | null;
+}) {
   const [session, setSession] = useState<AuthenticatedSession | null>(initialSession);
   const [identifier, setIdentifier] = useState(initialSession?.email ?? "");
   const [password, setPassword] = useState("");
@@ -471,7 +480,7 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
     setIdentifier(initialSession?.email ?? "");
     setPassword("");
     setError(null);
-  }, [initialSession]);
+  }, [initialSession, pendingAccess]);
 
   useEffect(() => {
     if (typeof window === "undefined" || initialSession) return;
@@ -598,6 +607,58 @@ function SidebarAuth({ role, initialSession }: { role: Role; initialSession: Aut
         <div className="ay-sidebar-auth-links footer">
           <Link href={accountPath}>Open my dashboard</Link>
           <button type="button" onClick={handleLogout} disabled={pending}>Sign out</button>
+        </div>
+        {error ? <p className="ay-inline-error">{error}</p> : null}
+      </section>
+    );
+  }
+
+  if (pendingAccess) {
+    return (
+      <section className="ay-sidebar-auth-card ay-sidebar-account-card">
+        <div className="ay-sidebar-auth-head">
+          <span className="ay-icon-badge">
+            <MedicalIcon name="shield" />
+          </span>
+          <div>
+            <strong>Access request in progress</strong>
+            <span>
+              {pendingAccess.status === "details_required"
+                ? "Complete the patient information form on this page."
+                : pendingAccess.status === "submitted"
+                  ? "Application is under process."
+                  : pendingAccess.status === "approved"
+                    ? "Approval completed. Opening your dashboard."
+                    : "This request needs follow-up with the care team."}
+            </span>
+          </div>
+        </div>
+        <div className="ay-sidebar-account-summary">
+          <strong>{pendingAccess.displayName}</strong>
+          <span>{pendingAccess.email}</span>
+          <div className="ay-sidebar-account-meta">
+            <em>{pendingAccess.desiredRole}</em>
+            <em>{pendingAccess.provider}</em>
+          </div>
+        </div>
+        <div className="ay-sidebar-trust-box compact">
+          <span className="ay-icon-badge">
+            <MedicalIcon name="patient" />
+          </span>
+          <div>
+            <strong>Pending approval</strong>
+            <span>
+              {pendingAccess.status === "details_required"
+                ? "Submit your patient information so Admin can review the request."
+                : pendingAccess.status === "submitted"
+                  ? "An Admin can approve this request or change the role before access is granted."
+                  : "Role-based access is being finalized."}
+            </span>
+          </div>
+        </div>
+        <div className="ay-sidebar-auth-links footer">
+          <span>Need another account?</span>
+          <button type="button" onClick={handleLogout} disabled={pending}>Use a different sign-in</button>
         </div>
         {error ? <p className="ay-inline-error">{error}</p> : null}
       </section>
@@ -1205,7 +1266,14 @@ function Assistant({ role, patient, session }: { role: Role; patient: Patient; s
   );
 }
 
-function AdminView({ onSelect }: { onSelect: (selection: EntitySelection) => void }) {
+function AdminView({
+  onSelect,
+  pendingApprovals
+}: {
+  onSelect: (selection: EntitySelection) => void;
+  pendingApprovals: PendingAccessRequestContract[];
+}) {
+  const [showPendingApprovals, setShowPendingApprovals] = useState(false);
   const now = useCurrentTime();
   const dateInfo = formatDateTime(now);
   const calendarCells = now ? buildCalendarCells(now) : [];
@@ -1223,6 +1291,18 @@ function AdminView({ onSelect }: { onSelect: (selection: EntitySelection) => voi
           <span className="ay-pill">Admin dashboard</span>
           <h2>Operational overview</h2>
           <p>ArogyaYatra combines care-team workload, appointments, patient risk, and refill pressure into one coded command surface.</p>
+        </div>
+        <div className="ay-topbar-actions">
+          <button
+            type="button"
+            className="ay-ghost-button ay-count-button"
+            onClick={() => setShowPendingApprovals((value) => !value)}
+            aria-expanded={showPendingApprovals}
+            aria-controls="pending-approvals-panel"
+          >
+            <span>Pending approvals</span>
+            <em>{pendingApprovals.length}</em>
+          </button>
         </div>
       </div>
       <div className="ay-kpis">
@@ -1277,6 +1357,7 @@ function AdminView({ onSelect }: { onSelect: (selection: EntitySelection) => voi
           </div>
         </div>
       </Card>
+      {showPendingApprovals ? <PendingApprovalsCard initialApprovals={pendingApprovals} /> : null}
       <div className="ay-admin-grid">
         <Card title="Appointments overview">
           <div className="ay-bars">{["42", "68", "78", "88", "82", "96", "70"].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div>
@@ -1309,6 +1390,157 @@ function AdminView({ onSelect }: { onSelect: (selection: EntitySelection) => voi
         </Card>
       </div>
     </div>
+  );
+}
+
+function PendingApprovalsCard({ initialApprovals }: { initialApprovals: PendingAccessRequestContract[] }) {
+  const [approvals, setApprovals] = useState(initialApprovals);
+  const [selectedRoles, setSelectedRoles] = useState<Record<string, Role>>(
+    Object.fromEntries(initialApprovals.map((request) => [request.id, request.desiredRole]))
+  );
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setApprovals(initialApprovals);
+    setSelectedRoles(Object.fromEntries(initialApprovals.map((request) => [request.id, request.desiredRole])));
+    setExpandedRequestId(null);
+  }, [initialApprovals]);
+
+  async function handleApprove(requestId: string) {
+    const approvedRole = selectedRoles[requestId];
+    if (!approvedRole || approvedRole === "home" || approvedRole === "feedback") return;
+
+    setPendingId(requestId);
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/admin/pending-approvals/${requestId}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvedRole })
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        setMessage(payload?.error ?? "Unable to approve this request.");
+        return;
+      }
+
+      setApprovals((current) => current.filter((request) => request.id !== requestId));
+      setMessage("Pending access approved.");
+    } catch {
+      setMessage("Unable to approve this request right now.");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
+  return (
+    <Card
+      title="Pending approvals"
+      className="ay-pending-approvals-card"
+      action={<span className="ay-badge info">{approvals.length} waiting</span>}
+    >
+      <div id="pending-approvals-panel" className="ay-pending-approvals">
+        {approvals.length === 0 ? (
+          <div className="ay-empty-state">
+            <strong>No pending approvals right now.</strong>
+            <span>New Google onboarding requests will appear here after users submit their patient information form.</span>
+          </div>
+        ) : (
+          approvals.map((request) => (
+            <article key={request.id} className="ay-pending-approval-row">
+              <div className="ay-pending-approval-copy">
+                <strong>{request.displayName}</strong>
+                <span>{request.email}</span>
+                <div className="ay-sidebar-account-meta">
+                  <em>{request.provider}</em>
+                  <em>{request.status.replaceAll("_", " ")}</em>
+                  <em>{request.desiredRole}</em>
+                </div>
+                <p>
+                  Diagnosis: {request.diagnosisSummary || "Not submitted yet"} | Discharge site: {request.dischargeFacility || "Waiting on form"}
+                </p>
+                <small>
+                  Emergency contact: {request.emergencyContactName || "Pending"} {request.emergencyContactPhone ? `(${request.emergencyContactPhone})` : ""}
+                </small>
+                {expandedRequestId === request.id ? (
+                  <div className="ay-pending-approval-detail">
+                    <div className="ay-detail-list">
+                      <div>
+                        <strong>Phone</strong>
+                        <span>{request.phone || "Pending"}</span>
+                      </div>
+                      <div>
+                        <strong>Date of birth</strong>
+                        <span>{request.dateOfBirth || "Pending"}</span>
+                      </div>
+                      <div>
+                        <strong>Address</strong>
+                        <span>{request.addressLine || "Pending"}</span>
+                      </div>
+                      <div>
+                        <strong>Submitted</strong>
+                        <span>{request.submittedAt ? formatMockLoginTime(request.submittedAt) : "Waiting on form completion"}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="ay-pending-approval-actions">
+                <label className="ay-field">
+                  <span>Approved role</span>
+                  <select
+                    value={selectedRoles[request.id] ?? request.desiredRole}
+                    onChange={(event) =>
+                      setSelectedRoles((current) => ({
+                        ...current,
+                        [request.id]: event.target.value as Role
+                      }))
+                    }
+                  >
+                    {(["patient", "nurse", "pharmacist", "admin", "developer"] as const).map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="ay-pending-approval-button-row">
+                  <button
+                    type="button"
+                    className="ay-secondary-button"
+                    onClick={() => setExpandedRequestId((current) => (current === request.id ? null : request.id))}
+                  >
+                    {expandedRequestId === request.id ? "Hide details" : "View details"}
+                  </button>
+                  <button
+                    type="button"
+                    className="ay-primary-button"
+                    onClick={() => void handleApprove(request.id)}
+                    disabled={pendingId === request.id}
+                  >
+                    {pendingId === request.id ? "Approving..." : "Approve directly"}
+                  </button>
+                </div>
+                {expandedRequestId === request.id ? (
+                  <button
+                    type="button"
+                    className="ay-primary-button"
+                    onClick={() => void handleApprove(request.id)}
+                    disabled={pendingId === request.id}
+                  >
+                    {pendingId === request.id ? "Approving..." : "Approve with selected role"}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+      {message ? <p className="ay-form-feedback info">{message}</p> : null}
+    </Card>
   );
 }
 
@@ -1773,7 +2005,218 @@ function PharmacistView({ queuePatients }: { queuePatients?: Patient[] }) {
   );
 }
 
-function HomeView() {
+function PendingOnboardingHome({ pendingAccess }: { pendingAccess: PendingAccessRequestContract }) {
+  const [request, setRequest] = useState(pendingAccess);
+  const [displayName, setDisplayName] = useState(pendingAccess.displayName);
+  const [phone, setPhone] = useState(pendingAccess.phone ?? "");
+  const [dateOfBirth, setDateOfBirth] = useState(pendingAccess.dateOfBirth ?? "");
+  const [addressLine, setAddressLine] = useState(pendingAccess.addressLine ?? "");
+  const [diagnosisSummary, setDiagnosisSummary] = useState(pendingAccess.diagnosisSummary ?? "");
+  const [dischargeFacility, setDischargeFacility] = useState(pendingAccess.dischargeFacility ?? "");
+  const [emergencyContactName, setEmergencyContactName] = useState(pendingAccess.emergencyContactName ?? "");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState(pendingAccess.emergencyContactPhone ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+
+  useEffect(() => {
+    setRequest(pendingAccess);
+    setDisplayName(pendingAccess.displayName);
+    setPhone(pendingAccess.phone ?? "");
+    setDateOfBirth(pendingAccess.dateOfBirth ?? "");
+    setAddressLine(pendingAccess.addressLine ?? "");
+    setDiagnosisSummary(pendingAccess.diagnosisSummary ?? "");
+    setDischargeFacility(pendingAccess.dischargeFacility ?? "");
+    setEmergencyContactName(pendingAccess.emergencyContactName ?? "");
+    setEmergencyContactPhone(pendingAccess.emergencyContactPhone ?? "");
+  }, [pendingAccess]);
+
+  useEffect(() => {
+    if (request.status !== "submitted" && request.status !== "approved") return;
+
+    let active = true;
+    let timerId = 0;
+
+    const syncStatus = async () => {
+      try {
+        const statusResponse = await fetch("/api/auth/pending/status", { cache: "no-store" });
+        const statusPayload = (await statusResponse.json().catch(() => null)) as
+          | { request?: PendingAccessRequestContract | null; approved?: boolean }
+          | null;
+
+        if (!statusResponse.ok || !statusPayload?.request || !active) {
+          return;
+        }
+
+        setRequest(statusPayload.request);
+
+        if (statusPayload.approved) {
+          const activateResponse = await fetch("/api/auth/pending/activate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+          const activatePayload = (await activateResponse.json().catch(() => null)) as { redirectTo?: string; error?: string } | null;
+
+          if (activateResponse.ok && activatePayload?.redirectTo) {
+            window.location.assign(activatePayload.redirectTo);
+            return;
+          }
+
+          if (active && activatePayload?.error) {
+            setFeedbackMessage(activatePayload.error);
+          }
+        }
+      } catch {
+        if (active) {
+          setFeedbackMessage("We could not refresh your approval status. Try reloading this page.");
+        }
+      }
+    };
+
+    void syncStatus();
+    timerId = window.setInterval(() => {
+      void syncStatus();
+    }, 5000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timerId);
+    };
+  }, [request.status]);
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    setFeedbackMessage("");
+
+    try {
+      const response = await fetch("/api/auth/pending/profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName,
+          phone,
+          dateOfBirth,
+          addressLine,
+          diagnosisSummary,
+          dischargeFacility,
+          emergencyContactName,
+          emergencyContactPhone
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as { request?: PendingAccessRequestContract; error?: string } | null;
+      if (!response.ok || !payload?.request) {
+        setFeedbackMessage(payload?.error ?? "Unable to submit the patient information form.");
+        return;
+      }
+
+      setRequest(payload.request);
+      setFeedbackMessage("Application is under process.");
+    } catch {
+      setFeedbackMessage("Unable to submit the patient information form right now.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="ay-board">
+      <Card className="ay-home-hero-banner-card">
+        <div className="ay-home-hero-banner">
+          <Image src="/homepage-banner-wide.png" alt="ArogyaYatra integrated co-ordination journey banner" width={1672} height={1080} priority />
+        </div>
+      </Card>
+      <Card className="ay-login-gate-card">
+        <div className="ay-login-gate-copy">
+          <span className="ay-kicker">Patient onboarding</span>
+          <strong>Login to access the Dashboard</strong>
+          <span>Google authentication created a pending patient access request. Complete the patient information form so Admin can review and assign the final role.</span>
+        </div>
+      </Card>
+      <div className="ay-grid-2">
+        <Card title="Complete patient information" className="ay-onboarding-card">
+          {request.status === "details_required" ? (
+            <div className="ay-form-grid ay-onboarding-grid">
+              <label className="ay-field">
+                <span>Full name</span>
+                <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+              </label>
+              <label className="ay-field">
+                <span>Email</span>
+                <input value={request.email} readOnly />
+              </label>
+              <label className="ay-field">
+                <span>Phone</span>
+                <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+1 (555) 000-0000" />
+              </label>
+              <label className="ay-field">
+                <span>Date of birth</span>
+                <input type="date" value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} />
+              </label>
+              <label className="ay-field full">
+                <span>Address</span>
+                <input value={addressLine} onChange={(event) => setAddressLine(event.target.value)} placeholder="Street, city, state" />
+              </label>
+              <label className="ay-field full">
+                <span>Diagnosis summary</span>
+                <textarea value={diagnosisSummary} onChange={(event) => setDiagnosisSummary(event.target.value)} rows={3} placeholder="Describe the current discharge diagnosis or reason for follow-up." />
+              </label>
+              <label className="ay-field full">
+                <span>Discharge facility or care location</span>
+                <input value={dischargeFacility} onChange={(event) => setDischargeFacility(event.target.value)} placeholder="Hospital, clinic, or care unit" />
+              </label>
+              <label className="ay-field">
+                <span>Emergency contact name</span>
+                <input value={emergencyContactName} onChange={(event) => setEmergencyContactName(event.target.value)} />
+              </label>
+              <label className="ay-field">
+                <span>Emergency contact phone</span>
+                <input value={emergencyContactPhone} onChange={(event) => setEmergencyContactPhone(event.target.value)} />
+              </label>
+              <div className="ay-form-actions">
+                <button className="ay-primary-button" type="button" onClick={() => void handleSubmit()} disabled={submitting}>
+                  {submitting ? "Submitting..." : "Submit patient information"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="ay-onboarding-status">
+              <span className="ay-pill">{request.status === "approved" ? "Approved" : request.status === "rejected" ? "Needs follow-up" : "Submitted"}</span>
+              <strong>{request.status === "approved" ? "Approval completed." : "Application is under process."}</strong>
+              <p>
+                {request.status === "approved"
+                  ? "Your role-based access has been approved. We are opening the correct dashboard for you now."
+                  : request.status === "rejected"
+                    ? "The access request needs follow-up from Admin. Please contact the care operations team."
+                    : "Admin will review the patient information, approve access, and can change the final role before your dashboard becomes visible."}
+              </p>
+              <div className="ay-detail-list">
+                <div><strong>Requested role</strong><span>{request.desiredRole}</span></div>
+                <div><strong>Provider</strong><span>{request.provider}</span></div>
+                <div><strong>Submitted</strong><span>{request.submittedAt ? formatMockLoginTime(request.submittedAt) : "Waiting on form completion"}</span></div>
+              </div>
+            </div>
+          )}
+          {feedbackMessage ? <p className="ay-form-feedback info">{feedbackMessage}</p> : null}
+        </Card>
+        <Card title="What happens next" className="ay-onboarding-card">
+          <ul className="ay-list">
+            <li><strong>Step 1</strong><span>Your Google account is provisionally registered as a patient access request.</span></li>
+            <li><strong>Step 2</strong><span>Complete the patient information form so Admin can review the request safely.</span></li>
+            <li><strong>Step 3</strong><span>Admin can approve the request as patient or change the final role before access is activated.</span></li>
+            <li><strong>Step 4</strong><span>Once approved, your role-based dashboard becomes visible automatically.</span></li>
+          </ul>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function HomeView({
+  isAuthenticated,
+  pendingAccess
+}: {
+  isAuthenticated: boolean;
+  pendingAccess?: PendingAccessRequestContract | null;
+}) {
   const now = useCurrentTime();
   const dateInfo = formatDateTime(now);
   const topPatient = priorityPatients()[0];
@@ -1814,6 +2257,29 @@ function HomeView() {
     const messages = shuffleMessages(approvedHomeRibbonMessages(HOME_POSITIVE_MESSAGES));
     setTickerMessages(messages);
   }, []);
+
+  if (pendingAccess) {
+    return <PendingOnboardingHome pendingAccess={pendingAccess} />;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="ay-board">
+        <Card className="ay-home-hero-banner-card">
+          <div className="ay-home-hero-banner">
+            <Image src="/homepage-banner-wide.png" alt="ArogyaYatra integrated co-ordination journey banner" width={1672} height={1080} priority />
+          </div>
+        </Card>
+        <Card className="ay-login-gate-card">
+          <div className="ay-login-gate-copy">
+            <span className="ay-kicker">Home</span>
+            <strong>Login to access the Dashboard</strong>
+            <span>Sign in with Google or use your approved role-based credentials to continue into ArogyaYatra.</span>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="ay-board">
@@ -1899,8 +2365,10 @@ export function ArogyaYatraDashboard({
   initialRole = "home",
   patientId = "PT-1001",
   initialSession = null,
+  pendingAccess = null,
   nursePatientIds,
   pharmacistPatientIds,
+  pendingApprovals = [],
   developerSourceRole,
   developerPatientId,
   feedbackRequestAccess = false,
@@ -1909,8 +2377,10 @@ export function ArogyaYatraDashboard({
   initialRole?: Role;
   patientId?: string;
   initialSession?: AuthenticatedSession | null;
+  pendingAccess?: PendingAccessRequestContract | null;
   nursePatientIds?: string[];
   pharmacistPatientIds?: string[];
+  pendingApprovals?: PendingAccessRequestContract[];
   developerSourceRole?: Role;
   developerPatientId?: string;
   feedbackRequestAccess?: boolean;
@@ -1921,6 +2391,7 @@ export function ArogyaYatraDashboard({
   const patient = useMemo(() => getPatientById(patientId), [patientId]);
   const nurseQueue = useMemo(() => getPatientsByIds(nursePatientIds ?? []), [nursePatientIds]);
   const pharmacistQueue = useMemo(() => getPatientsByIds(pharmacistPatientIds ?? []), [pharmacistPatientIds]);
+  const isAuthenticated = Boolean(initialSession);
   const role = initialRole;
   const feedbackSourceRole = role === "feedback" ? "home" : role;
   const feedbackHref = `/feedback?sourceRole=${feedbackSourceRole}&patientId=${patient.id}`;
@@ -1955,7 +2426,7 @@ export function ArogyaYatraDashboard({
             <span>Your access is protected through role-aware workflows and safe review.</span>
           </div>
         </div>
-        <SidebarAuth role={role} initialSession={initialSession} />
+        <SidebarAuth role={role} initialSession={initialSession} pendingAccess={pendingAccess} />
         <nav>
           {visibleNavItems.map((item) => (
             <Link key={item.id} href={item.href} className={role === item.id ? "active" : ""}>
@@ -1970,7 +2441,7 @@ export function ArogyaYatraDashboard({
           ))}
         </nav>
         <div className="ay-sidebar-actions">
-          <Link href={feedbackHref} className="ay-sidebar-feedback">Help us improve</Link>
+          {isAuthenticated ? <Link href={feedbackHref} className="ay-sidebar-feedback">Help us improve</Link> : null}
           <div className="ay-sidebar-footer-note">
             <span className="ay-icon-badge">
               <MedicalIcon name="shield" />
@@ -1980,8 +2451,8 @@ export function ArogyaYatraDashboard({
         </div>
       </aside>
       <main className="ay-main">
-        {role === "home" ? <HomeView /> : null}
-        {role === "admin" ? <AdminView onSelect={setSelection} /> : null}
+        {role === "home" ? <HomeView isAuthenticated={isAuthenticated} pendingAccess={pendingAccess} /> : null}
+        {role === "admin" ? <AdminView onSelect={setSelection} pendingApprovals={pendingApprovals} /> : null}
         {role === "patient" ? <PatientView patient={patient} /> : null}
         {role === "nurse" ? <NurseView queuePatients={nurseQueue} /> : null}
         {role === "pharmacist" ? <PharmacistView queuePatients={pharmacistQueue} /> : null}
