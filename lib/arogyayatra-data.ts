@@ -272,6 +272,19 @@ export const admins: AdminUser[] = [
     },
     title: "Care Operations Lead",
     scope: "Priority coordination, staffing, and workflow oversight"
+  },
+  {
+    id: "AD-102",
+    name: "Nidhi Gupta",
+    account: {
+      email: "guptanidhi.iitk@gmail.com",
+      username: "guptanidhi.iitk",
+      phone: "+1 (555) 101-9002",
+      authStatus: "active",
+      lastLoginAt: "2026-04-29T10:30:00-04:00"
+    },
+    title: "Care Operations Administrator",
+    scope: "Priority coordination, staffing, and workflow oversight"
   }
 ];
 

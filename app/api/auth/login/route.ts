@@ -20,6 +20,12 @@ export async function POST(request: Request) {
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return NextResponse.json({ error: "invalid credentials" }, { status: 401 });
   }
+  if (user.authStatus === "pending_approval") {
+    return NextResponse.json({ error: "Your access request is still under review." }, { status: 403 });
+  }
+  if (user.authStatus === "invited") {
+    return NextResponse.json({ error: "This account is invited but not yet activated." }, { status: 403 });
+  }
 
   const token = await createSessionToken(user);
   const claims = await verifySessionToken(token);

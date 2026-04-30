@@ -6,6 +6,9 @@ export type JourneyStage = (typeof JOURNEY_STAGE_MODEL)[number];
 
 export type AuthenticatedAppRole = Exclude<AppRole, "home" | "feedback">;
 
+export const PENDING_ACCESS_STATUS_MODEL = ["details_required", "submitted", "approved", "rejected"] as const;
+export type PendingAccessStatus = (typeof PENDING_ACCESS_STATUS_MODEL)[number];
+
 export type AccessScopeKind =
   | "public_home"
   | "operational_admin"
@@ -30,6 +33,29 @@ export type UserSessionContract = {
   authenticated: boolean;
   issuedAt: string;
   scope: AccessScopeContract;
+};
+
+export type PendingAccessRequestContract = {
+  id: string;
+  userId: string;
+  email: string;
+  displayName: string;
+  provider: string;
+  desiredRole: AuthenticatedAppRole;
+  status: PendingAccessStatus;
+  phone?: string;
+  dateOfBirth?: string;
+  addressLine?: string;
+  diagnosisSummary?: string;
+  dischargeFacility?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  approvalNotes?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PatientContextContract = {

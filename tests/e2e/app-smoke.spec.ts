@@ -10,12 +10,11 @@ async function login(page: Page, identifier: string, password: string, expectedP
   await page.waitForURL(`**${expectedPath}`);
 }
 
-test("home page loads and shows workspace routing", async ({ page }) => {
+test("home page loads as a login-gated landing page", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Available Workspaces")).toBeVisible();
-  await expect(page.getByText("Choose a role")).toBeVisible();
+  await expect(page.getByText("Login to access the Dashboard")).toBeVisible();
   await expect(page.getByRole("button", { name: /Sign in with Google/i })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Admin dashboard/i })).toBeVisible();
+  await expect(page.getByText("Available Workspaces")).toHaveCount(0);
 });
 
 test("patient page requires login, then loads with neutral greeting", async ({ page }) => {
