@@ -170,7 +170,15 @@ export async function GET(request: Request) {
     });
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
     return response;
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[auth][google][callback] OAuth flow failed", {
+      message,
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      cookieStatePresent: Boolean(oauthState?.state),
+      stateMatchesCookie: Boolean(oauthState?.state && state && oauthState.state === state)
+    });
     const response = redirectWithAuthState(request, "google_failed");
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
     return response;
