@@ -2,6 +2,7 @@ import { AuthStatus, FeedbackUserType, UserRole, type Prisma } from "@prisma/cli
 import { hashSync } from "bcryptjs";
 import type { AuthenticatedAppRole, AccessScopeContract, UserSessionContract } from "@/lib/app-foundation";
 import { admins, authUsers, developers, nurses, patients, patientsForNurse, patientsForPharmacist, pharmacists } from "@/lib/arogyayatra-data";
+import { findLocalAuthUserById, findLocalAuthUserByIdentifier, updateLocalAuthUserLastLogin } from "@/lib/auth/local-auth-store";
 import { getPrismaClient, hasDatabaseUrl } from "@/lib/server/prisma";
 
 export type AuthUserRecord = {
@@ -233,11 +234,16 @@ export async function findAuthUserByIdentifier(identifier: string): Promise<Auth
   if (!normalized) return null;
 
   if (hasDatabaseUrl()) {
-    const record = await findDbUser({
-      OR: [{ email: normalized }, { username: normalized }]
-    });
-    if (record) return record;
+    try {
+      const record = await findDbUser({
+        OR: [{ email: normalized }, { username: normalized }]
+      });
+      if (record) return record;
+    } catch {}
   }
+
+  const localRecord = await findLocalAuthUserByIdentifier(normalized);
+  if (localRecord) return localRecord;
 
   return DEMO_USERS.find(
     (user) => user.email.toLowerCase() === normalized || user.username.toLowerCase() === normalized
@@ -246,25 +252,43 @@ export async function findAuthUserByIdentifier(identifier: string): Promise<Auth
 
 export async function findAuthUserById(userId: string): Promise<AuthUserRecord | null> {
   if (hasDatabaseUrl()) {
-    const record = await findDbUser({ id: userId });
-    if (record) return record;
+    try {
+      const record = await findDbUser({ id: userId });
+      if (record) return record;
+    } catch {}
   }
+  const localRecord = await findLocalAuthUserById(userId);
+  if (localRecord) return localRecord;
   return findDemoUserById(userId);
 }
 
 export async function updateLastLogin(userId: string): Promise<void> {
-  if (!hasDatabaseUrl()) return;
+  if (!hasDatabaseUrl()) {
+    await updateLocalAuthUserLastLogin(userId);
+    return;
+  }
 
-  await getPrismaClient().user.update({
-    where: { id: userId },
-    data: { lastLoginAt: new Date() }
-  });
+  try {
+    await getPrismaClient().user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() }
+    });
+  } catch {
+    await updateLocalAuthUserLastLogin(userId);
+  }
 }
 
 export async function buildSessionForUser(user: AuthUserRecord, sessionId: string): Promise<AuthenticatedSession | null> {
   if (user.authStatus !== "active") return null;
 
-  const scope = hasDatabaseUrl() ? await buildDbScope(user) : buildDemoScope(user);
+  let scope = buildDemoScope(user);
+  if (hasDatabaseUrl()) {
+    try {
+      scope = await buildDbScope(user);
+    } catch {
+      scope = buildDemoScope(user);
+    }
+  }
 
   return {
     sessionId,
@@ -326,15 +350,17 @@ export async function recordAuditEvent(input: {
 }): Promise<void> {
   if (!hasDatabaseUrl()) return;
 
-  await getPrismaClient().auditLog.create({
-    data: {
-      userId: input.actorId,
-      actorRole: input.actorRole,
-      eventType: input.eventType,
-      summary: input.summary,
-      metadata: input.metadata
-    }
-  });
+  try {
+    await getPrismaClient().auditLog.create({
+      data: {
+        userId: input.actorId,
+        actorRole: input.actorRole,
+        eventType: input.eventType,
+        summary: input.summary,
+        metadata: input.metadata
+      }
+    });
+  } catch {}
 }
 
 export async function recordFeedback(input: {
@@ -349,18 +375,20 @@ export async function recordFeedback(input: {
 }): Promise<void> {
   if (!hasDatabaseUrl()) return;
 
-  await getPrismaClient().feedback.create({
-    data: {
-      userId: input.userId,
-      sourceRole: input.sourceRole,
-      patientId: input.patientId,
-      userType: input.userType.toUpperCase() as FeedbackUserType,
-      aiGoal: input.aiGoal,
-      feedback: input.feedback,
-      desiredOutcome: input.desiredOutcome,
-      constraints: input.constraints
-    }
-  });
+  try {
+    await getPrismaClient().feedback.create({
+      data: {
+        userId: input.userId,
+        sourceRole: input.sourceRole,
+        patientId: input.patientId,
+        userType: input.userType.toUpperCase() as FeedbackUserType,
+        aiGoal: input.aiGoal,
+        feedback: input.feedback,
+        desiredOutcome: input.desiredOutcome,
+        constraints: input.constraints
+      }
+    });
+  } catch {}
 }
 
 export async function recordTrace(input: {
@@ -376,28 +404,30 @@ export async function recordTrace(input: {
   if (!hasDatabaseUrl()) return;
 
   const requestKey = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const prisma = getPrismaClient();
-  await prisma.trace.create({
-    data: {
-      requestKey,
-      userId: input.userId,
-      role: userRoleToPrisma(input.role),
-      patientId: input.patientId,
-      runtimeMode: input.runtimeMode,
-      question: input.question,
-      answerSummary: input.answerSummary,
-      toolCalls: {
-        create: input.toolCalls.map((tool) => ({
-          toolName: tool.toolName,
-          summary: tool.summary
-        }))
-      },
-      policyEvents: {
-        create: input.policyEvents.map((event) => ({
-          trigger: event.trigger,
-          summary: event.summary
-        }))
+  try {
+    const prisma = getPrismaClient();
+    await prisma.trace.create({
+      data: {
+        requestKey,
+        userId: input.userId,
+        role: userRoleToPrisma(input.role),
+        patientId: input.patientId,
+        runtimeMode: input.runtimeMode,
+        question: input.question,
+        answerSummary: input.answerSummary,
+        toolCalls: {
+          create: input.toolCalls.map((tool) => ({
+            toolName: tool.toolName,
+            summary: tool.summary
+          }))
+        },
+        policyEvents: {
+          create: input.policyEvents.map((event) => ({
+            trigger: event.trigger,
+            summary: event.summary
+          }))
+        }
       }
-    }
-  });
+    });
+  } catch {}
 }

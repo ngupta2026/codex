@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { PendingAccessRequestContract } from "@/lib/app-foundation";
 import type { AuthenticatedSession } from "@/lib/auth/repository";
@@ -813,12 +814,16 @@ function DeveloperView({
   requestAccessFromQuery?: boolean;
   providerFromQuery?: string;
 }) {
+  const router = useRouter();
   const isRequestAccessMode = Boolean(requestAccessFromQuery);
+  const accessProvider = providerFromQuery?.trim() || "manual";
   const providerLabel = providerFromQuery?.trim() ? `${providerFromQuery.trim()} sign-in` : "the public sign-in flow";
   const defaultSourceRole =
     sourceRoleFromQuery || (currentRole === "home" || currentRole === "developer" || currentRole === "feedback" ? "home" : currentRole);
   const [sourceRole, setSourceRole] = useState<Role>(defaultSourceRole);
   const [patientId, setPatientId] = useState(patientIdFromQuery || currentPatient.id);
+  const [accessDisplayName, setAccessDisplayName] = useState("");
+  const [accessEmail, setAccessEmail] = useState("");
   const [userType, setUserType] = useState("customer");
   const [aiGoal, setAiGoal] = useState("care coordination");
   const [feedback, setFeedback] = useState(() =>
@@ -878,6 +883,68 @@ function DeveloperView({
     }
   }
 
+  async function submitAccessRequest() {
+    const trimmedName = accessDisplayName.trim();
+    const trimmedEmail = accessEmail.trim().toLowerCase();
+    const trimmedFeedback = feedback.trim();
+    const trimmedOutcome = desiredOutcome.trim();
+
+    if (!trimmedName || !trimmedEmail) {
+      setErrorMessage("Name and email are required before preparing the access request.");
+      return;
+    }
+
+    if (!trimmedFeedback) {
+      setErrorMessage("Add a short explanation so the team understands why access is needed.");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const response = await fetch("/api/auth/pending/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: trimmedName,
+          email: trimmedEmail,
+          provider: accessProvider,
+          requestDetails: trimmedOutcome
+            ? `${trimmedFeedback}\n\nRequested outcome: ${trimmedOutcome}`
+            : trimmedFeedback
+        })
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            request?: PendingAccessRequestContract;
+            error?: string;
+          }
+        | null;
+
+      if (!response.ok || !payload?.request) {
+        setErrorMessage(payload?.error || "Unable to create the access request right now.");
+        return;
+      }
+
+      setGeneratedPrompt(
+        [
+          `Request ID: ${payload.request.id}`,
+          `Name: ${payload.request.displayName}`,
+          `Email: ${payload.request.email}`,
+          `Initial role: ${payload.request.desiredRole}`,
+          `Status: ${payload.request.status.replaceAll("_", " ")}`
+        ].join("\n")
+      );
+      setContextSummary("Pending review");
+      router.push("/");
+      router.refresh();
+    } catch {
+      setErrorMessage("Unable to create the access request right now.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="ay-board">
       <div className="ay-topbar">
@@ -892,90 +959,174 @@ function DeveloperView({
         </div>
       </div>
       <div className="ay-grid-2">
-        <Card title="Feedback intake">
+        <Card title={isRequestAccessMode ? "Access request intake" : "Feedback intake"}>
           <div className="ay-form-grid">
             {isRequestAccessMode ? (
-              <div className="ay-form-feedback info" role="status">
-                Unknown Google users are routed here so the team can review access needs before provisioning a role.
-              </div>
-            ) : null}
-            <label className="ay-field">
-              <span>Source page</span>
-              <select value={sourceRole} onChange={(event) => setSourceRole(event.target.value as Role)}>
-                {navItems.filter((item) => item.id !== "developer" && item.id !== "feedback").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              </select>
-            </label>
-            <label className="ay-field">
-              <span>End user</span>
-              <select value={userType} onChange={(event) => setUserType(event.target.value)}>
-                {["customer", "patient", "nurse", "pharmacist", "admin", "caregiver", "developer"].map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-            </label>
-            <label className="ay-field">
-              <span>Patient context</span>
-              <select value={patientId} onChange={(event) => setPatientId(event.target.value)}>
-                {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.name}</option>)}
-              </select>
-            </label>
-            <label className="ay-field">
-              <span>AI goal</span>
-              <select value={aiGoal} onChange={(event) => setAiGoal(event.target.value)}>
-                {["care coordination", "personalized guidance", "workflow automation", "history summarization", "medication support", "virtual visit support", "custom"].map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-            </label>
-            <label className="ay-field full">
-              <span>{isRequestAccessMode ? "Access request details" : "Feedback from the current page"}</span>
-              <textarea
-                value={feedback}
-                onChange={(event) => {
-                  setFeedback(event.target.value);
-                  if (errorMessage) setErrorMessage("");
-                }}
-                placeholder="Describe the pain point, missing AI behavior, or workflow gap."
-                rows={5}
-              />
-            </label>
-            <label className="ay-field full">
-              <span>{isRequestAccessMode ? "Desired access outcome" : "Desired outcome"}</span>
-              <textarea
-                value={desiredOutcome}
-                onChange={(event) => {
-                  setDesiredOutcome(event.target.value);
-                  if (errorMessage) setErrorMessage("");
-                }}
-                placeholder="Describe what the app should do for this end user."
-                rows={4}
-              />
-            </label>
-            <label className="ay-field full">
-              <span>Constraints</span>
-              <textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} rows={3} />
-            </label>
-            <div className="ay-form-actions">
-              <button className="ay-primary-button" type="button" onClick={() => void generatePrompt()}>
-                {loading ? "Generating..." : isRequestAccessMode ? "Prepare access request" : "Generate ChatGPT prompt"}
-              </button>
-            </div>
-            {errorMessage ? <p className="ay-form-feedback" role="alert">{errorMessage}</p> : null}
+              <>
+                <div className="ay-form-feedback info" role="status">
+                  New users start as pending patient access so the team can review the request before opening a dashboard.
+                </div>
+                <label className="ay-field">
+                  <span>Full name</span>
+                  <input
+                    value={accessDisplayName}
+                    onChange={(event) => {
+                      setAccessDisplayName(event.target.value);
+                      if (errorMessage) setErrorMessage("");
+                    }}
+                    placeholder="Enter the user's full name"
+                  />
+                </label>
+                <label className="ay-field">
+                  <span>Email address</span>
+                  <input
+                    type="email"
+                    value={accessEmail}
+                    onChange={(event) => {
+                      setAccessEmail(event.target.value);
+                      if (errorMessage) setErrorMessage("");
+                    }}
+                    placeholder="Enter the email used for sign-in"
+                  />
+                </label>
+                <label className="ay-field">
+                  <span>Source page</span>
+                  <select value={sourceRole} onChange={(event) => setSourceRole(event.target.value as Role)}>
+                    {navItems.filter((item) => item.id !== "developer" && item.id !== "feedback").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                  </select>
+                </label>
+                <label className="ay-field">
+                  <span>Initial role</span>
+                  <input value="patient" readOnly />
+                </label>
+                <label className="ay-field full">
+                  <span>Access request details</span>
+                  <textarea
+                    value={feedback}
+                    onChange={(event) => {
+                      setFeedback(event.target.value);
+                      if (errorMessage) setErrorMessage("");
+                    }}
+                    placeholder="Describe why access is needed and what the user was trying to do."
+                    rows={5}
+                  />
+                </label>
+                <label className="ay-field full">
+                  <span>What should happen next?</span>
+                  <textarea
+                    value={desiredOutcome}
+                    onChange={(event) => {
+                      setDesiredOutcome(event.target.value);
+                      if (errorMessage) setErrorMessage("");
+                    }}
+                    placeholder="Describe any role or workflow outcome the admin team should consider."
+                    rows={4}
+                  />
+                </label>
+                <div className="ay-form-actions">
+                  <button className="ay-primary-button" type="button" onClick={() => void submitAccessRequest()}>
+                    {loading ? "Submitting..." : "Prepare access request"}
+                  </button>
+                </div>
+                {errorMessage ? <p className="ay-form-feedback" role="alert">{errorMessage}</p> : null}
+              </>
+            ) : (
+              <>
+                <label className="ay-field">
+                  <span>Source page</span>
+                  <select value={sourceRole} onChange={(event) => setSourceRole(event.target.value as Role)}>
+                    {navItems.filter((item) => item.id !== "developer" && item.id !== "feedback").map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                  </select>
+                </label>
+                <label className="ay-field">
+                  <span>End user</span>
+                  <select value={userType} onChange={(event) => setUserType(event.target.value)}>
+                    {["customer", "patient", "nurse", "pharmacist", "admin", "caregiver", "developer"].map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="ay-field">
+                  <span>Patient context</span>
+                  <select value={patientId} onChange={(event) => setPatientId(event.target.value)}>
+                    {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.name}</option>)}
+                  </select>
+                </label>
+                <label className="ay-field">
+                  <span>AI goal</span>
+                  <select value={aiGoal} onChange={(event) => setAiGoal(event.target.value)}>
+                    {["care coordination", "personalized guidance", "workflow automation", "history summarization", "medication support", "virtual visit support", "custom"].map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="ay-field full">
+                  <span>Feedback from the current page</span>
+                  <textarea
+                    value={feedback}
+                    onChange={(event) => {
+                      setFeedback(event.target.value);
+                      if (errorMessage) setErrorMessage("");
+                    }}
+                    placeholder="Describe the pain point, missing AI behavior, or workflow gap."
+                    rows={5}
+                  />
+                </label>
+                <label className="ay-field full">
+                  <span>Desired outcome</span>
+                  <textarea
+                    value={desiredOutcome}
+                    onChange={(event) => {
+                      setDesiredOutcome(event.target.value);
+                      if (errorMessage) setErrorMessage("");
+                    }}
+                    placeholder="Describe what the app should do for this end user."
+                    rows={4}
+                  />
+                </label>
+                <label className="ay-field full">
+                  <span>Constraints</span>
+                  <textarea value={constraints} onChange={(event) => setConstraints(event.target.value)} rows={3} />
+                </label>
+                <div className="ay-form-actions">
+                  <button className="ay-primary-button" type="button" onClick={() => void generatePrompt()}>
+                    {loading ? "Generating..." : "Generate ChatGPT prompt"}
+                  </button>
+                </div>
+                {errorMessage ? <p className="ay-form-feedback" role="alert">{errorMessage}</p> : null}
+              </>
+            )}
           </div>
         </Card>
-        <Card title="Context snapshot">
-          <div className="ay-developer-summary">
-            <div className="ay-detail-list">
-              <div><strong>Source page</strong><span>{sourceRole}</span></div>
-              <div><strong>Selected patient</strong><span>{selectedPatient.name} - {selectedPatient.diagnosis}</span></div>
-              <div><strong>Care team</strong><span>{selectedPatient.nurse}; {selectedPatient.pharmacist}</span></div>
-              <div><strong>Current barrier</strong><span>{selectedPatient.barrier}</span></div>
+        <Card title={isRequestAccessMode ? "What happens next" : "Context snapshot"}>
+          {isRequestAccessMode ? (
+            <div className="ay-developer-summary">
+              <div className="ay-detail-list">
+                <div><strong>Provider</strong><span>{accessProvider}</span></div>
+                <div><strong>Requested route</strong><span>{sourceRole}</span></div>
+                <div><strong>Initial role</strong><span>patient</span></div>
+                <div><strong>Admin action</strong><span>Approve directly or open details and change the role before approval.</span></div>
+              </div>
+              <ul className="ay-list">
+                <li><strong>1. Create pending request</strong><span>The request is saved to the approvals queue.</span></li>
+                <li><strong>2. Complete patient information</strong><span>The landing page will collect the onboarding details needed for review.</span></li>
+                <li><strong>3. Wait for admin approval</strong><span>Once approved, the user's dashboard becomes visible.</span></li>
+              </ul>
             </div>
-            <div className="ay-agent-grid">
-              {agentCapabilities.map((agent) => (
-                <div key={agent.name} className="ay-agent-card">
-                  <strong>{agent.name}</strong>
-                  <span>{agent.detail}</span>
-                </div>
-              ))}
+          ) : (
+            <div className="ay-developer-summary">
+              <div className="ay-detail-list">
+                <div><strong>Source page</strong><span>{sourceRole}</span></div>
+                <div><strong>Selected patient</strong><span>{selectedPatient.name} - {selectedPatient.diagnosis}</span></div>
+                <div><strong>Care team</strong><span>{selectedPatient.nurse}; {selectedPatient.pharmacist}</span></div>
+                <div><strong>Current barrier</strong><span>{selectedPatient.barrier}</span></div>
+              </div>
+              <div className="ay-agent-grid">
+                {agentCapabilities.map((agent) => (
+                  <div key={agent.name} className="ay-agent-card">
+                    <strong>{agent.name}</strong>
+                    <span>{agent.detail}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </Card>
       </div>
       <Card title={isRequestAccessMode ? "Generated access request" : "Generated prompt"} action={contextSummary ? <span className="ay-badge info">{contextSummary}</span> : null}>
@@ -1274,6 +1425,8 @@ function AdminView({
   pendingApprovals: PendingAccessRequestContract[];
 }) {
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
+  const [approvals, setApprovals] = useState(pendingApprovals);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
   const now = useCurrentTime();
   const dateInfo = formatDateTime(now);
   const calendarCells = now ? buildCalendarCells(now) : [];
@@ -1283,6 +1436,45 @@ function AdminView({
   const topPatients = priorityPatients().slice(0, 3);
   const topNurses = priorityNurses().slice(0, 3);
   const topPharmacists = priorityPharmacists().slice(0, 3);
+
+  useEffect(() => {
+    setApprovals(pendingApprovals);
+  }, [pendingApprovals]);
+
+  useEffect(() => {
+    if (!showPendingApprovals) return;
+
+    let cancelled = false;
+
+    async function refreshPendingApprovals() {
+      setApprovalsLoading(true);
+      try {
+        const response = await fetch("/api/admin/pending-approvals", {
+          method: "GET",
+          cache: "no-store"
+        });
+        const payload = (await response.json().catch(() => null)) as { requests?: PendingAccessRequestContract[] } | null;
+        if (!response.ok || !payload?.requests || cancelled) {
+          return;
+        }
+        setApprovals(payload.requests);
+      } finally {
+        if (!cancelled) {
+          setApprovalsLoading(false);
+        }
+      }
+    }
+
+    void refreshPendingApprovals();
+    const timer = window.setInterval(() => {
+      void refreshPendingApprovals();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [showPendingApprovals]);
 
   return (
     <div className="ay-board">
@@ -1301,7 +1493,7 @@ function AdminView({
             aria-controls="pending-approvals-panel"
           >
             <span>Pending approvals</span>
-            <em>{pendingApprovals.length}</em>
+            <em>{approvalsLoading ? "..." : approvals.length}</em>
           </button>
         </div>
       </div>
@@ -1357,7 +1549,7 @@ function AdminView({
           </div>
         </div>
       </Card>
-      {showPendingApprovals ? <PendingApprovalsCard initialApprovals={pendingApprovals} /> : null}
+      {showPendingApprovals ? <PendingApprovalsCard approvals={approvals} setApprovals={setApprovals} isRefreshing={approvalsLoading} /> : null}
       <div className="ay-admin-grid">
         <Card title="Appointments overview">
           <div className="ay-bars">{["42", "68", "78", "88", "82", "96", "70"].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div>
@@ -1393,20 +1585,26 @@ function AdminView({
   );
 }
 
-function PendingApprovalsCard({ initialApprovals }: { initialApprovals: PendingAccessRequestContract[] }) {
-  const [approvals, setApprovals] = useState(initialApprovals);
+function PendingApprovalsCard({
+  approvals,
+  setApprovals,
+  isRefreshing
+}: {
+  approvals: PendingAccessRequestContract[];
+  setApprovals: Dispatch<SetStateAction<PendingAccessRequestContract[]>>;
+  isRefreshing: boolean;
+}) {
   const [selectedRoles, setSelectedRoles] = useState<Record<string, Role>>(
-    Object.fromEntries(initialApprovals.map((request) => [request.id, request.desiredRole]))
+    Object.fromEntries(approvals.map((request) => [request.id, request.desiredRole]))
   );
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    setApprovals(initialApprovals);
-    setSelectedRoles(Object.fromEntries(initialApprovals.map((request) => [request.id, request.desiredRole])));
+    setSelectedRoles(Object.fromEntries(approvals.map((request) => [request.id, request.desiredRole])));
     setExpandedRequestId(null);
-  }, [initialApprovals]);
+  }, [approvals]);
 
   async function handleApprove(requestId: string) {
     const approvedRole = selectedRoles[requestId];
@@ -1440,13 +1638,13 @@ function PendingApprovalsCard({ initialApprovals }: { initialApprovals: PendingA
     <Card
       title="Pending approvals"
       className="ay-pending-approvals-card"
-      action={<span className="ay-badge info">{approvals.length} waiting</span>}
+      action={<span className="ay-badge info">{isRefreshing ? "Refreshing..." : `${approvals.length} waiting`}</span>}
     >
       <div id="pending-approvals-panel" className="ay-pending-approvals">
         {approvals.length === 0 ? (
           <div className="ay-empty-state">
             <strong>No pending approvals right now.</strong>
-            <span>New Google onboarding requests will appear here after users submit their patient information form.</span>
+            <span>New request-access submissions and Google onboarding requests will appear here after users enter their details.</span>
           </div>
         ) : (
           approvals.map((request) => (
@@ -1462,6 +1660,7 @@ function PendingApprovalsCard({ initialApprovals }: { initialApprovals: PendingA
                 <p>
                   Diagnosis: {request.diagnosisSummary || "Not submitted yet"} | Discharge site: {request.dischargeFacility || "Waiting on form"}
                 </p>
+                <small>Request notes: {request.approvalNotes || "No additional notes submitted yet."}</small>
                 <small>
                   Emergency contact: {request.emergencyContactName || "Pending"} {request.emergencyContactPhone ? `(${request.emergencyContactPhone})` : ""}
                 </small>
