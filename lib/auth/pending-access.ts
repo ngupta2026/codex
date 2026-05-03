@@ -709,7 +709,16 @@ export async function createPublicPendingAccessRequest(input: {
     });
 
     return { kind: "created", request: mapPendingAccess(created) };
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify({
+      fn: "createPublicPendingAccessRequest",
+      outcome: "prisma_error",
+      email: input.email,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorCode: (error as Record<string, unknown>)?.code,
+      errorMeta: (error as Record<string, unknown>)?.meta,
+      canUseLocalFile: canUseLocalFileAuthStorage()
+    }));
     return canUseLocalFileAuthStorage() ? createLocalPublicPendingAccessRequest(input) : { kind: "database_unavailable" };
   }
 }

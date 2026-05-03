@@ -35,6 +35,17 @@ export async function POST(request: Request) {
   });
 
   if (result.kind === "database_unavailable") {
+    console.error(JSON.stringify({
+      route: "POST /api/auth/pending/request",
+      outcome: "database_unavailable",
+      email,
+      provider,
+      hasDatabaseUrl: Boolean(process.env.DATABASE_URL || process.env.PRISMA_DATABASE_URL || process.env.POSTGRES_URL),
+      vercel: process.env.VERCEL,
+      nodeEnv: process.env.NODE_ENV,
+      vercelRegion: process.env.VERCEL_REGION,
+      vercelUrl: process.env.VERCEL_URL
+    }));
     return NextResponse.json({ error: "Request access requires the database-backed approval workflow to be enabled." }, { status: 503 });
   }
 
