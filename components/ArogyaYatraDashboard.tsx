@@ -1427,6 +1427,7 @@ function AdminView({
   const [showPendingApprovals, setShowPendingApprovals] = useState(false);
   const [approvals, setApprovals] = useState(pendingApprovals);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [showDatabaseView, setShowDatabaseView] = useState(false);
   const now = useCurrentTime();
   const dateInfo = formatDateTime(now);
   const calendarCells = now ? buildCalendarCells(now) : [];
@@ -1495,6 +1496,15 @@ function AdminView({
             <span>Pending approvals</span>
             <em>{approvalsLoading ? "..." : approvals.length}</em>
           </button>
+          <button
+            type="button"
+            className="ay-ghost-button"
+            onClick={() => setShowDatabaseView((value) => !value)}
+            aria-expanded={showDatabaseView}
+            aria-controls="database-view-panel"
+          >
+            <span>{showDatabaseView ? "Hide database" : "View database"}</span>
+          </button>
         </div>
       </div>
       <div className="ay-kpis">
@@ -1550,6 +1560,7 @@ function AdminView({
         </div>
       </Card>
       {showPendingApprovals ? <PendingApprovalsCard approvals={approvals} setApprovals={setApprovals} isRefreshing={approvalsLoading} /> : null}
+      {showDatabaseView ? <DatabaseViewCard /> : null}
       <div className="ay-admin-grid">
         <Card title="Appointments overview">
           <div className="ay-bars">{["42", "68", "78", "88", "82", "96", "70"].map((height, index) => <span key={index} style={{ height: `${height}%` }} />)}</div>
@@ -1581,6 +1592,115 @@ function AdminView({
           </table>
         </Card>
       </div>
+    </div>
+  );
+}
+
+type DatabaseTableStat = { table: string; count: number };
+type DatabaseUser = { id: string; email: string; displayName: string; role: string; authStatus: string; createdAt: string; lastLoginAt: string | null };
+type DatabasePending = { id: string; email: string; displayName: string; provider: string; desiredRole: string; status: string; createdAt: string };
+type DatabaseViewPayload = { source: string; stats: DatabaseTableStat[]; users: DatabaseUser[]; pendingRequests: DatabasePending[] };
+
+function DatabaseViewCard() {
+  const [data, setData] = useState<DatabaseViewPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"stats" | "users" | "pending">("stats");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    fetch("/api/admin/database", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((payload: DatabaseViewPayload & { error?: string }) => {
+        if (cancelled) return;
+        if (payload.error) { setError(payload.error); return; }
+        setData(payload);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load database.");
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div id="database-view-panel" className="ay-card" style={{ marginBottom: "1rem" }}>
+      <div className="ay-card-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem" }}>
+        <div>
+          <p className="ay-kicker">Prisma Postgres</p>
+          <h3 style={{ margin: 0 }}>Database</h3>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {(["stats", "users", "pending"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={activeTab === tab ? "ay-ghost-button" : "ay-ghost-button"}
+              style={{ fontWeight: activeTab === tab ? 700 : 400, textDecoration: activeTab === tab ? "underline" : "none" }}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === "stats" ? "Table stats" : tab === "users" ? "Users" : "Pending requests"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <p style={{ padding: "1rem", opacity: 0.6 }}>Loading database…</p>
+      ) : error ? (
+        <p style={{ padding: "1rem", color: "var(--ay-red, #dc2626)" }}>{error}</p>
+      ) : !data || data.source === "unavailable" ? (
+        <p style={{ padding: "1rem", opacity: 0.6 }}>Database not available in this environment.</p>
+      ) : activeTab === "stats" ? (
+        <table className="ay-table" style={{ width: "100%" }}>
+          <thead><tr><th>Table</th><th style={{ textAlign: "right" }}>Row count</th></tr></thead>
+          <tbody>
+            {data.stats.map((stat) => (
+              <tr key={stat.table}>
+                <td><code>{stat.table}</code></td>
+                <td style={{ textAlign: "right" }}><strong>{stat.count}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : activeTab === "users" ? (
+        <table className="ay-table" style={{ width: "100%" }}>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th></tr></thead>
+          <tbody>
+            {data.users.map((user) => (
+              <tr key={user.id}>
+                <td>{user.displayName}</td>
+                <td style={{ fontSize: "0.8em" }}>{user.email}</td>
+                <td><span className={badgeClass(user.role)}>{user.role}</span></td>
+                <td><span className={user.authStatus === "active" ? "ay-badge success" : "ay-badge warning"}>{user.authStatus}</span></td>
+                <td style={{ fontSize: "0.8em", opacity: 0.7 }}>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <table className="ay-table" style={{ width: "100%" }}>
+          <thead><tr><th>Name</th><th>Email</th><th>Provider</th><th>Role</th><th>Status</th><th>Created</th></tr></thead>
+          <tbody>
+            {data.pendingRequests.length === 0 ? (
+              <tr><td colSpan={6} style={{ opacity: 0.6 }}>No pending requests.</td></tr>
+            ) : data.pendingRequests.map((req) => (
+              <tr key={req.id}>
+                <td>{req.displayName}</td>
+                <td style={{ fontSize: "0.8em" }}>{req.email}</td>
+                <td>{req.provider}</td>
+                <td>{req.desiredRole}</td>
+                <td><span className={req.status === "approved" ? "ay-badge success" : req.status === "rejected" ? "ay-badge danger" : "ay-badge warning"}>{req.status}</span></td>
+                <td style={{ fontSize: "0.8em", opacity: 0.7 }}>{new Date(req.createdAt).toLocaleDateString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
