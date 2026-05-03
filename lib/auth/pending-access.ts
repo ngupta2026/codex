@@ -3,7 +3,7 @@ import { hashSync } from "bcryptjs";
 import type { AuthenticatedAppRole, PendingAccessRequestContract, PendingAccessStatus as PendingAccessStatusContract } from "@/lib/app-foundation";
 import { patients } from "@/lib/arogyayatra-data";
 import { mutateLocalAuthStore, readLocalAuthStore } from "@/lib/auth/local-auth-store";
-import { getPrismaClient, hasDatabaseUrl } from "@/lib/server/prisma";
+import { canUseLocalFileAuthStorage, getPrismaClient, hasDatabaseUrl } from "@/lib/server/prisma";
 
 type PendingUserSeed = {
   id: string;
@@ -464,7 +464,7 @@ async function approveLocalPendingAccessRequest(input: {
 
 export async function findPendingAccessById(requestId: string): Promise<PendingAccessRequestContract | null> {
   if (!hasDatabaseUrl()) {
-    return findLocalPendingAccessById(requestId);
+    return canUseLocalFileAuthStorage() ? findLocalPendingAccessById(requestId) : null;
   }
 
   try {
@@ -474,13 +474,13 @@ export async function findPendingAccessById(requestId: string): Promise<PendingA
 
     return record ? mapPendingAccess(record) : null;
   } catch {
-    return findLocalPendingAccessById(requestId);
+    return canUseLocalFileAuthStorage() ? findLocalPendingAccessById(requestId) : null;
   }
 }
 
 export async function findPendingAccessByUserId(userId: string): Promise<PendingAccessRequestContract | null> {
   if (!hasDatabaseUrl()) {
-    return findLocalPendingAccessByUserId(userId);
+    return canUseLocalFileAuthStorage() ? findLocalPendingAccessByUserId(userId) : null;
   }
 
   try {
@@ -490,13 +490,13 @@ export async function findPendingAccessByUserId(userId: string): Promise<Pending
 
     return record ? mapPendingAccess(record) : null;
   } catch {
-    return findLocalPendingAccessByUserId(userId);
+    return canUseLocalFileAuthStorage() ? findLocalPendingAccessByUserId(userId) : null;
   }
 }
 
 export async function listPendingAccessRequests(): Promise<PendingAccessRequestContract[]> {
   if (!hasDatabaseUrl()) {
-    return listLocalPendingAccessRequests();
+    return canUseLocalFileAuthStorage() ? listLocalPendingAccessRequests() : [];
   }
 
   try {
@@ -507,7 +507,7 @@ export async function listPendingAccessRequests(): Promise<PendingAccessRequestC
 
     return records.map(mapPendingAccess);
   } catch {
-    return listLocalPendingAccessRequests();
+    return canUseLocalFileAuthStorage() ? listLocalPendingAccessRequests() : [];
   }
 }
 
@@ -517,7 +517,7 @@ export async function createPendingGooglePatientAccess(input: {
   googleSubject?: string;
 }): Promise<PendingAccessRequestContract | null> {
   if (!hasDatabaseUrl()) {
-    return createLocalPendingGooglePatientAccess(input);
+    return canUseLocalFileAuthStorage() ? createLocalPendingGooglePatientAccess(input) : null;
   }
 
   try {
@@ -569,7 +569,7 @@ export async function createPendingGooglePatientAccess(input: {
 
     return mapPendingAccess(request);
   } catch {
-    return createLocalPendingGooglePatientAccess(input);
+    return canUseLocalFileAuthStorage() ? createLocalPendingGooglePatientAccess(input) : null;
   }
 }
 
@@ -581,7 +581,7 @@ export async function createPublicPendingAccessRequest(input: {
   desiredRole?: AuthenticatedAppRole;
 }): Promise<CreatePendingAccessRequestResult> {
   if (!hasDatabaseUrl()) {
-    return createLocalPublicPendingAccessRequest(input);
+    return canUseLocalFileAuthStorage() ? createLocalPublicPendingAccessRequest(input) : { kind: "database_unavailable" };
   }
 
   try {
@@ -704,13 +704,13 @@ export async function createPublicPendingAccessRequest(input: {
 
     return { kind: "created", request: mapPendingAccess(created) };
   } catch {
-    return createLocalPublicPendingAccessRequest(input);
+    return canUseLocalFileAuthStorage() ? createLocalPublicPendingAccessRequest(input) : { kind: "database_unavailable" };
   }
 }
 
 export async function ensurePendingAccessForUser(user: PendingUserSeed, input?: { googleSubject?: string; provider?: string }): Promise<PendingAccessRequestContract | null> {
   if (!hasDatabaseUrl()) {
-    return ensureLocalPendingAccessForUser(user, input);
+    return canUseLocalFileAuthStorage() ? ensureLocalPendingAccessForUser(user, input) : null;
   }
 
   try {
@@ -737,7 +737,7 @@ export async function ensurePendingAccessForUser(user: PendingUserSeed, input?: 
 
     return mapPendingAccess(created);
   } catch {
-    return ensureLocalPendingAccessForUser(user, input);
+    return canUseLocalFileAuthStorage() ? ensureLocalPendingAccessForUser(user, input) : null;
   }
 }
 
@@ -755,7 +755,7 @@ export async function submitPendingPatientProfile(
   }
 ): Promise<PendingAccessRequestContract | null> {
   if (!hasDatabaseUrl()) {
-    return submitLocalPendingPatientProfile(requestId, input);
+    return canUseLocalFileAuthStorage() ? submitLocalPendingPatientProfile(requestId, input) : null;
   }
 
   try {
@@ -794,7 +794,7 @@ export async function submitPendingPatientProfile(
 
     return mapPendingAccess(updated);
   } catch {
-    return submitLocalPendingPatientProfile(requestId, input);
+    return canUseLocalFileAuthStorage() ? submitLocalPendingPatientProfile(requestId, input) : null;
   }
 }
 
@@ -804,7 +804,7 @@ export async function approvePendingAccessRequest(input: {
   approvalNotes?: string;
 }): Promise<PendingAccessRequestContract | null> {
   if (!hasDatabaseUrl()) {
-    return approveLocalPendingAccessRequest(input);
+    return canUseLocalFileAuthStorage() ? approveLocalPendingAccessRequest(input) : null;
   }
 
   try {
@@ -841,6 +841,6 @@ export async function approvePendingAccessRequest(input: {
 
     return mapPendingAccess(updated);
   } catch {
-    return approveLocalPendingAccessRequest(input);
+    return canUseLocalFileAuthStorage() ? approveLocalPendingAccessRequest(input) : null;
   }
 }

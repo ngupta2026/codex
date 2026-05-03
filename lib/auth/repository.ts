@@ -3,7 +3,7 @@ import { hashSync } from "bcryptjs";
 import type { AuthenticatedAppRole, AccessScopeContract, UserSessionContract } from "@/lib/app-foundation";
 import { admins, authUsers, developers, nurses, patients, patientsForNurse, patientsForPharmacist, pharmacists } from "@/lib/arogyayatra-data";
 import { findLocalAuthUserById, findLocalAuthUserByIdentifier, updateLocalAuthUserLastLogin } from "@/lib/auth/local-auth-store";
-import { getPrismaClient, hasDatabaseUrl } from "@/lib/server/prisma";
+import { canUseLocalFileAuthStorage, getPrismaClient, hasDatabaseUrl } from "@/lib/server/prisma";
 
 export type AuthUserRecord = {
   id: string;
@@ -242,8 +242,10 @@ export async function findAuthUserByIdentifier(identifier: string): Promise<Auth
     } catch {}
   }
 
-  const localRecord = await findLocalAuthUserByIdentifier(normalized);
-  if (localRecord) return localRecord;
+  if (canUseLocalFileAuthStorage()) {
+    const localRecord = await findLocalAuthUserByIdentifier(normalized);
+    if (localRecord) return localRecord;
+  }
 
   return DEMO_USERS.find(
     (user) => user.email.toLowerCase() === normalized || user.username.toLowerCase() === normalized
@@ -257,14 +259,16 @@ export async function findAuthUserById(userId: string): Promise<AuthUserRecord |
       if (record) return record;
     } catch {}
   }
-  const localRecord = await findLocalAuthUserById(userId);
-  if (localRecord) return localRecord;
+  if (canUseLocalFileAuthStorage()) {
+    const localRecord = await findLocalAuthUserById(userId);
+    if (localRecord) return localRecord;
+  }
   return findDemoUserById(userId);
 }
 
 export async function updateLastLogin(userId: string): Promise<void> {
   if (!hasDatabaseUrl()) {
-    await updateLocalAuthUserLastLogin(userId);
+    if (canUseLocalFileAuthStorage()) await updateLocalAuthUserLastLogin(userId);
     return;
   }
 
@@ -274,7 +278,7 @@ export async function updateLastLogin(userId: string): Promise<void> {
       data: { lastLoginAt: new Date() }
     });
   } catch {
-    await updateLocalAuthUserLastLogin(userId);
+    if (canUseLocalFileAuthStorage()) await updateLocalAuthUserLastLogin(userId);
   }
 }
 
