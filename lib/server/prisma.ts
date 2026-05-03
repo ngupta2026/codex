@@ -4,6 +4,18 @@ const globalForPrisma = globalThis as typeof globalThis & {
   __arogyayatraPrisma?: PrismaClient;
 };
 
+function resolveDatabaseUrl(): string | undefined {
+  return process.env.DATABASE_URL || process.env.PRISMA_DATABASE_URL || process.env.POSTGRES_URL;
+}
+
+function ensureDatabaseUrlEnv(): string | undefined {
+  const databaseUrl = resolveDatabaseUrl();
+  if (databaseUrl && !process.env.DATABASE_URL) {
+    process.env.DATABASE_URL = databaseUrl;
+  }
+  return databaseUrl;
+}
+
 export function isDatabaseBackedAuthRequired(): boolean {
   return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
 }
@@ -13,11 +25,12 @@ export function canUseLocalFileAuthStorage(): boolean {
 }
 
 export function hasDatabaseUrl(): boolean {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(resolveDatabaseUrl());
 }
 
 export function getPrismaClient(): PrismaClient {
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = ensureDatabaseUrlEnv();
+  if (!databaseUrl) {
     throw new Error("DATABASE_URL is required for Prisma-backed operations.");
   }
 
