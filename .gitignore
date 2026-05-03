@@ -22,3 +22,6 @@ test-results/
 .env.production
 
 .vercel
+
+.vercel
+.env*.local

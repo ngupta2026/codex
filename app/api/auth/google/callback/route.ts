@@ -14,6 +14,36 @@ import { createPendingAccessToken, PENDING_ACCESS_COOKIE_NAME, SESSION_COOKIE_NA
 
 export const runtime = "nodejs";
 
+function logGoogleCallbackFailure(input: {
+  reason: string;
+  request: Request;
+  hasCode?: boolean;
+  hasState?: boolean;
+  stateMatchesCookie?: boolean;
+  cookieStatePresent?: boolean;
+  providerError?: string | null;
+  providerErrorDescription?: string | null;
+  errorMessage?: string;
+}) {
+  const url = new URL(input.request.url);
+  console.error("[auth][google][callback] failure", {
+    reason: input.reason,
+    errorMessage: input.errorMessage,
+    providerError: input.providerError,
+    providerErrorDescription: input.providerErrorDescription,
+    hasCode: input.hasCode,
+    hasState: input.hasState,
+    cookieStatePresent: input.cookieStatePresent,
+    stateMatchesCookie: input.stateMatchesCookie,
+    origin: url.origin,
+    path: url.pathname,
+    nodeEnv: process.env.NODE_ENV,
+    vercelRegion: process.env.VERCEL_REGION,
+    vercelUrl: process.env.VERCEL_URL,
+    vercelRequestId: input.request.headers.get("x-vercel-id")
+  });
+}
+
 function redirectWithAuthState(request: Request, authState: string) {
   return NextResponse.redirect(new URL(`/?auth=${encodeURIComponent(authState)}`, request.url));
 }
@@ -50,22 +80,47 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const providerError = url.searchParams.get("error");
+  const providerErrorDescription = url.searchParams.get("error_description");
   const cookieStore = await cookies();
   const oauthState = decodeGoogleOAuthStateCookie(cookieStore.get(GOOGLE_OAUTH_STATE_COOKIE_NAME)?.value);
 
   if (!isGoogleAuthConfigured()) {
+    logGoogleCallbackFailure({
+      reason: "google_config_missing",
+      request,
+      hasCode: Boolean(code),
+      hasState: Boolean(state)
+    });
     const response = redirectWithAuthState(request, "google_unavailable");
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
     return response;
   }
 
   if (providerError) {
+    logGoogleCallbackFailure({
+      reason: "provider_denied_or_failed",
+      request,
+      providerError,
+      providerErrorDescription,
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      cookieStatePresent: Boolean(oauthState?.state),
+      stateMatchesCookie: Boolean(oauthState?.state && state && oauthState.state === state)
+    });
     const response = redirectWithAuthState(request, "google_denied");
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
     return response;
   }
 
   if (!code || !state || !oauthState || oauthState.state !== state) {
+    logGoogleCallbackFailure({
+      reason: "missing_code_state_or_state_mismatch",
+      request,
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      cookieStatePresent: Boolean(oauthState?.state),
+      stateMatchesCookie: Boolean(oauthState?.state && state && oauthState.state === state)
+    });
     const response = redirectWithAuthState(request, "google_failed");
     response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
     return response;
@@ -76,6 +131,14 @@ export async function GET(request: Request) {
     const identity = await verifyGoogleIdToken(tokenPayload.id_token!, oauthState.nonce);
 
     if (!identity.emailVerified) {
+      logGoogleCallbackFailure({
+        reason: "email_not_verified",
+        request,
+        hasCode: true,
+        hasState: true,
+        cookieStatePresent: true,
+        stateMatchesCookie: true
+      });
       const response = redirectWithAuthState(request, "google_access_denied");
       response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
       return response;
@@ -90,6 +153,14 @@ export async function GET(request: Request) {
       });
 
       if (!pendingAccess) {
+        logGoogleCallbackFailure({
+          reason: "pending_access_creation_failed_for_new_user",
+          request,
+          hasCode: true,
+          hasState: true,
+          cookieStatePresent: true,
+          stateMatchesCookie: true
+        });
         const response = redirectToRequestAccess(request, "google");
         response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
         return response;
@@ -118,6 +189,14 @@ export async function GET(request: Request) {
       );
 
       if (!pendingAccess) {
+        logGoogleCallbackFailure({
+          reason: "pending_access_creation_failed_for_existing_pending_user",
+          request,
+          hasCode: true,
+          hasState: true,
+          cookieStatePresent: true,
+          stateMatchesCookie: true
+        });
         const response = redirectToRequestAccess(request, "google");
         response.cookies.delete(GOOGLE_OAUTH_STATE_COOKIE_NAME);
         return response;
@@ -172,8 +251,10 @@ export async function GET(request: Request) {
     return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("[auth][google][callback] OAuth flow failed", {
-      message,
+    logGoogleCallbackFailure({
+      reason: "oauth_exception",
+      request,
+      errorMessage: message,
       hasCode: Boolean(code),
       hasState: Boolean(state),
       cookieStatePresent: Boolean(oauthState?.state),
