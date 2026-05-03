@@ -62,7 +62,10 @@ async function nextAvailableUsername(email: string): Promise<string> {
   };
 
   if (!hasDatabaseUrl()) {
-    return localCandidate();
+    if (canUseLocalFileAuthStorage()) {
+      return localCandidate();
+    }
+    throw new Error("Database URL is required to generate username in production mode.");
   }
 
   try {
@@ -76,8 +79,11 @@ async function nextAvailableUsername(email: string): Promise<string> {
     }
 
     return candidate;
-  } catch {
-    return localCandidate();
+  } catch (error) {
+    if (canUseLocalFileAuthStorage()) {
+      return localCandidate();
+    }
+    throw error;
   }
 }
 
