@@ -652,6 +652,13 @@ export async function createPublicPendingAccessRequest(input: {
       );
 
       if (!pendingRequest) {
+        console.error(JSON.stringify({
+          fn: "createPublicPendingAccessRequest",
+          outcome: "ensure_pending_returned_null",
+          email: normalizedEmail,
+          existingUserId: existingUser.id,
+          existingUserStatus: existingUser.authStatus
+        }));
         return { kind: "database_unavailable" };
       }
 
@@ -751,7 +758,17 @@ export async function ensurePendingAccessForUser(user: PendingUserSeed, input?: 
     });
 
     return mapPendingAccess(created);
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify({
+      fn: "ensurePendingAccessForUser",
+      outcome: "prisma_error",
+      userId: user.id,
+      email: user.email,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorCode: (error as Record<string, unknown>)?.code,
+      errorMeta: (error as Record<string, unknown>)?.meta,
+      canUseLocalFile: canUseLocalFileAuthStorage()
+    }));
     return canUseLocalFileAuthStorage() ? ensureLocalPendingAccessForUser(user, input) : null;
   }
 }
